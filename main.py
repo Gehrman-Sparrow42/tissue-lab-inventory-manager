@@ -44,12 +44,12 @@ if "type" in st.query_params and "id" in st.query_params:
                         st.write(f"- {k}: {val}")
                     st.write(f"**Created At:** {rack.created_at.strftime('%Y-%m-%d %H:%M')}")
                 with col3:
-                    if rack.qr_code_path:
-                        st.image(rack.qr_code_path, width=150, caption="QR Code")
-                        from modules.qr_utils import get_qr_bytes
-                        qr_bytes = get_qr_bytes(rack.qr_code_path)
-                        if qr_bytes:
-                            st.download_button(label="Download QR", data=qr_bytes, file_name=f"Rack_{rack.rack_identifier}_QR.png", mime="image/png", key="dl_qr_rack")
+                    from modules.qr_utils import generate_qr_code, get_qr_bytes
+                    qr_url = generate_qr_code(rack.rack_identifier, "rack")
+                    st.image(qr_url, width=150, caption="QR Code")
+                    qr_bytes = get_qr_bytes(qr_url)
+                    if qr_bytes:
+                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Rack_{rack.rack_identifier}_QR.png", mime="image/png", key="dl_qr_rack")
             else:
                 st.error("Rack not found.")
         except Exception:
@@ -75,12 +75,12 @@ if "type" in st.query_params and "id" in st.query_params:
                     else:
                         st.write("No racks assigned to this variety.")
                 with col2:
-                    if v.qr_code_path:
-                        st.image(v.qr_code_path, width=150, caption="QR Code")
-                        from modules.qr_utils import get_qr_bytes
-                        qr_bytes = get_qr_bytes(v.qr_code_path)
-                        if qr_bytes:
-                            st.download_button(label="Download QR", data=qr_bytes, file_name=f"Variety_{v.id}_QR.png", mime="image/png", key="dl_qr_var")
+                    from modules.qr_utils import generate_qr_code, get_qr_bytes
+                    qr_url = generate_qr_code(str(v.id), "variety")
+                    st.image(qr_url, width=150, caption="QR Code")
+                    qr_bytes = get_qr_bytes(qr_url)
+                    if qr_bytes:
+                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Variety_{v.id}_QR.png", mime="image/png", key="dl_qr_var")
             else:
                 st.error("Variety not found.")
         except:
@@ -104,12 +104,12 @@ if "type" in st.query_params and "id" in st.query_params:
                     else:
                         st.write("No varieties registered.")
                 with col2:
-                    if s.qr_code_path:
-                        st.image(s.qr_code_path, width=150, caption="QR Code")
-                        from modules.qr_utils import get_qr_bytes
-                        qr_bytes = get_qr_bytes(s.qr_code_path)
-                        if qr_bytes:
-                            st.download_button(label="Download QR", data=qr_bytes, file_name=f"Species_{s.id}_QR.png", mime="image/png", key="dl_qr_spec")
+                    from modules.qr_utils import generate_qr_code, get_qr_bytes
+                    qr_url = generate_qr_code(str(s.id), "species")
+                    st.image(qr_url, width=150, caption="QR Code")
+                    qr_bytes = get_qr_bytes(qr_url)
+                    if qr_bytes:
+                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Species_{s.id}_QR.png", mime="image/png", key="dl_qr_spec")
             else:
                 st.error("Species not found.")
         except:

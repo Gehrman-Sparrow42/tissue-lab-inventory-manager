@@ -9,3 +9,6 @@ venv/
 assets/images/
 assets/qrcodes/
 *.lnk
+.agents/
+skills-lock.json
+

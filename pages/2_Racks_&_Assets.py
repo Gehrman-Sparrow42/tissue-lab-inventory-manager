@@ -152,18 +152,18 @@ if racks_list:
                 for k, val in meta.items():
                     st.write(f"- **{k}:** {val}")
             with col3:
-                if rack.qr_code_path:
-                    st.image(rack.qr_code_path, width=150)
-                    from modules.qr_utils import get_qr_bytes
-                    qr_bytes = get_qr_bytes(rack.qr_code_path)
-                    if qr_bytes:
-                        st.download_button(
-                            label="Download Label",
-                            data=qr_bytes,
-                            file_name=f"{rack.rack_identifier}_QR.png",
-                            mime="image/png",
-                            key=f"dl_{rack.id}"
-                        )
+                from modules.qr_utils import generate_qr_code, get_qr_bytes
+                qr_url = generate_qr_code(rack.rack_identifier, "rack")
+                st.image(qr_url, width=150)
+                qr_bytes = get_qr_bytes(qr_url)
+                if qr_bytes:
+                    st.download_button(
+                        label="Download Label",
+                        data=qr_bytes,
+                        file_name=f"{rack.rack_identifier}_QR.png",
+                        mime="image/png",
+                        key=f"dl_{rack.id}"
+                    )
                 if is_admin():
                     st.write("---")
                     col_del, col_edit = st.columns(2)

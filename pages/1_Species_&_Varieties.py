@@ -139,12 +139,12 @@ else:
                                         except json.JSONDecodeError:
                                             st.error("Invalid JSON format in Metadata Schema.")
             with col_s2:
-                if s.qr_code_path:
-                    st.image(s.qr_code_path, width=120)
-                    from modules.qr_utils import get_qr_bytes
-                    qr_bytes = get_qr_bytes(s.qr_code_path)
-                    if qr_bytes:
-                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Species_{s.id}_QR.png", mime="image/png", key=f"dl_s_{s.id}")
+                from modules.qr_utils import generate_qr_code, get_qr_bytes
+                qr_url = generate_qr_code(str(s.id), "species")
+                st.image(qr_url, width=120)
+                qr_bytes = get_qr_bytes(qr_url)
+                if qr_bytes:
+                    st.download_button(label="Download QR", data=qr_bytes, file_name=f"Species_{s.id}_QR.png", mime="image/png", key=f"dl_s_{s.id}")
             
             st.write("---")
             st.markdown(f"##### Varieties of {s.name}")
@@ -159,8 +159,8 @@ else:
                     vcol2.write(f"{v.description if v.description else '-'}")
                     
                     with vcol3:
-                        if v.qr_code_path:
-                            st.image(v.qr_code_path, width=80)
+                        qr_url_v = generate_qr_code(str(v.id), "variety")
+                        st.image(qr_url_v, width=80)
                     
                     if vcol4.button("View Racks", key=f"view_r_{v.id}", type="primary"):
                         st.session_state.filter_variety_id = v.id
