@@ -34,7 +34,10 @@ if filter_v_id:
 
 search_query = st.text_input("Global Search (Rack ID, Metadata)", "")
 
-varieties_list = session.exec(select(Variety)).all()
+with st.spinner("Loading database records..."):
+    varieties_list = session.exec(select(Variety)).all()
+    varieties_dict = {v.id: v for v in varieties_list}
+    species_dict = {s.id: s for s in session.exec(select(Species)).all()}
 
 if is_admin() and varieties_list:
     with st.expander("Add New Rack", expanded=False):
@@ -117,7 +120,8 @@ query = select(Rack)
 if filter_v_id:
     query = query.where(Rack.variety_id == filter_v_id)
     
-racks_list = session.exec(query).all()
+with st.spinner("Loading racks..."):
+    racks_list = session.exec(query).all()
 
 if search_query:
     q = search_query.lower()
@@ -131,8 +135,8 @@ if search_query:
 
 if racks_list:
     for rack in racks_list:
-        v = session.get(Variety, rack.variety_id)
-        s = session.get(Species, v.species_id) if v else None
+        v = varieties_dict.get(rack.variety_id)
+        s = species_dict.get(v.species_id) if v else None
         
         rack_label = f"{rack.name} ({rack.rack_identifier})" if rack.name else rack.rack_identifier
         with st.expander(f"Rack: {rack_label} | {v.name if v else 'Unknown'}"):
