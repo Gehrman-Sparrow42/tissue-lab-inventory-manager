@@ -7,10 +7,10 @@ load_dotenv(override=True)
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8501")
 
 def generate_qr_code(identifier: str, entity_type: str) -> str:
-    """Generates a dynamic QR code API link for the entity."""
+    """Generates a dynamic QR code API link for the entity with a white border (quiet zone)."""
     target_url = f"{BASE_URL}/?type={entity_type}&id={identifier}"
     encoded_url = urllib.parse.quote(target_url)
-    return f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={encoded_url}"
+    return f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={encoded_url}&margin=15"
 
 def get_qr_bytes(path_or_url: str) -> bytes:
     """Fetches QR code image bytes from URL or local path on demand."""
