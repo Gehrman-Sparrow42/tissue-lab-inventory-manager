@@ -1,0 +1,6 @@
+streamlit>=1.30.0
+sqlmodel>=0.0.14
+qrcode[pil]>=7.4.2
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+pandas>=2.0.0

@@ -1,0 +1,24 @@
+import os
+from sqlmodel import create_engine, SQLModel, Session
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+DB_PATH = os.getenv("DB_PATH", "data/inventory.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
+sqlite_url = f"sqlite:///{DB_PATH}"
+engine = create_engine(sqlite_url, echo=False)
+
+def create_db_and_tables():
+    from modules.models import Species, Variety, Rack, AuditLog
+    SQLModel.metadata.create_all(engine)
+
+def get_session():
+    return Session(engine)
+
+def log_audit(session: Session, action: str, table_name: str, record_id: int, details: str = ""):
+    from modules.models import AuditLog
+    log = AuditLog(action=action, table_name=table_name, record_id=record_id, details=details)
+    session.add(log)
+    session.commit()
