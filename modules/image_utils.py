@@ -22,3 +22,11 @@ def process_and_save_image(uploaded_file) -> str:
     
     img.save(file_path, format="JPEG", quality=85)
     return file_path
+
+def safe_remove_file(file_path: str):
+    """Safely deletes a file from disk if it exists."""
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass

@@ -15,8 +15,10 @@ def render_auth_ui():
     st.markdown(
         """
         <style>
-        header {visibility: hidden;}
+        .stAppDeployButton {display: none !important;}
+        .stDeployButton {display: none !important;}
         #MainMenu {visibility: hidden;}
+        button[data-testid="stHeaderDropdownMenu"] {visibility: hidden;}
         footer {visibility: hidden;}
         div[data-testid="stConnectionStatus"] {display: none !important;}
         </style>
@@ -36,7 +38,7 @@ def render_auth_ui():
             if os.path.exists(DB_PATH):
                 with open(DB_PATH, "rb") as f:
                     st.download_button(
-                        label="📦 Export Database",
+                        label="Export Database",
                         data=f,
                         file_name="inventory_backup.db",
                         mime="application/octet-stream"
@@ -53,9 +55,8 @@ def render_auth_ui():
                         st.error("Invalid password.")
         
         st.write("---")
-        if st.button("🛑 Stop Server", help="Instantly terminate the Streamlit server process."):
+        if st.button("Stop Server", help="Terminate the Streamlit server process."):
             st.warning("Server shutting down...")
-            import os
             os._exit(0)
 
 def is_admin():

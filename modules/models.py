@@ -40,6 +40,8 @@ class Rack(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     rack_identifier: str = Field(index=True, unique=True)
     variety_id: int = Field(foreign_key="variety.id")
+    name: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
     
     qr_code_path: Optional[str] = None
     image_url: Optional[str] = None

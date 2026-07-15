@@ -13,6 +13,16 @@ engine = create_engine(sqlite_url, echo=False)
 def create_db_and_tables():
     from modules.models import Species, Variety, Rack, AuditLog
     SQLModel.metadata.create_all(engine)
+    
+    # SQLite schema migration to add name and description columns to rack if missing
+    from sqlalchemy import text
+    with Session(engine) as session:
+        for col in ["name", "description"]:
+            try:
+                session.exec(text(f"ALTER TABLE rack ADD COLUMN {col} VARCHAR"))
+                session.commit()
+            except Exception:
+                session.rollback()
 
 def get_session():
     return Session(engine)

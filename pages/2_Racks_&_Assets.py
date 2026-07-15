@@ -8,10 +8,15 @@ from modules.image_utils import process_and_save_image
 import json
 import uuid
 
-st.set_page_config(page_title="Racks & Assets", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="Racks & Assets", page_icon=None, layout="wide")
 render_auth_ui()
 
-st.title("🧪 Racks & Assets Management")
+# Display persistent toast feedback if any
+if "toast_message" in st.session_state and st.session_state.toast_message:
+    st.toast(st.session_state.toast_message)
+    del st.session_state.toast_message
+
+st.title("Racks & Assets Management")
 
 session = get_session()
 
@@ -20,18 +25,19 @@ filter_v_id = st.session_state.get("filter_variety_id", None)
 if filter_v_id:
     v_obj = session.get(Variety, filter_v_id)
     if v_obj:
-        st.success(f"📌 Currently viewing racks for Variety: **{v_obj.name}**")
-        if st.button("❌ Clear Filter to Show All Racks"):
+        st.success(f"Currently viewing racks for Variety: **{v_obj.name}**")
+        if st.button("Clear Filter to Show All Racks"):
             st.session_state.filter_variety_id = None
+            st.session_state.toast_message = "Filter cleared."
             st.rerun()
         st.write("---")
 
-search_query = st.text_input("🔍 Global Search (Rack ID, Metadata)", "")
+search_query = st.text_input("Global Search (Rack ID, Metadata)", "")
 
 varieties_list = session.exec(select(Variety)).all()
 
 if is_admin() and varieties_list:
-    with st.expander("➕ Add New Rack", expanded=False):
+    with st.expander("Add New Rack", expanded=False):
         # Pre-select variety if filtering
         default_index = 0
         if filter_v_id:
@@ -54,6 +60,8 @@ if is_admin() and varieties_list:
                 
             with st.form("add_rack_form"):
                 r_id = st.text_input("Rack Identifier (Leave blank to auto-generate)")
+                r_name = st.text_input("Rack Name (Optional)")
+                r_desc = st.text_area("Rack Description (Optional)")
                 
                 st.write(f"**Metadata Configuration for {selected_s.name}**")
                 meta_values = {}
@@ -91,6 +99,8 @@ if is_admin() and varieties_list:
                         new_rack = Rack(
                             rack_identifier=r_id,
                             variety_id=r_variety,
+                            name=r_name.strip() if r_name.strip() else None,
+                            description=r_desc.strip() if r_desc.strip() else None,
                             qr_code_path=qr_path,
                             image_url=img_path,
                             metadata_json=json.dumps(meta_values)
@@ -98,7 +108,7 @@ if is_admin() and varieties_list:
                         session.add(new_rack)
                         session.commit()
                         log_audit(session, "CREATE", "Rack", new_rack.id, r_id)
-                        st.success(f"Rack {r_id} created successfully!")
+                        st.session_state.toast_message = f"Rack '{r_id}' created successfully!"
                         st.rerun()
 
 st.subheader("Rack Inventory")
@@ -111,14 +121,21 @@ racks_list = session.exec(query).all()
 
 if search_query:
     q = search_query.lower()
-    racks_list = [r for r in racks_list if q in r.rack_identifier.lower() or q in r.metadata_json.lower()]
+    racks_list = [
+        r for r in racks_list 
+        if q in r.rack_identifier.lower() 
+        or (r.name and q in r.name.lower())
+        or (r.description and q in r.description.lower())
+        or any(q in str(val).lower() for val in r.metadata_dict.values())
+    ]
 
 if racks_list:
     for rack in racks_list:
         v = session.get(Variety, rack.variety_id)
         s = session.get(Species, v.species_id) if v else None
         
-        with st.expander(f"🟢 Rack: {rack.rack_identifier} | {v.name if v else 'Unknown'}"):
+        rack_label = f"{rack.name} ({rack.rack_identifier})" if rack.name else rack.rack_identifier
+        with st.expander(f"Rack: {rack_label} | {v.name if v else 'Unknown'}"):
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
                 if rack.image_url:
@@ -126,6 +143,11 @@ if racks_list:
                 else:
                     st.info("No image available.")
             with col2:
+                st.write(f"**Rack ID:** {rack.rack_identifier}")
+                if rack.name:
+                    st.write(f"**Name:** {rack.name}")
+                if rack.description:
+                    st.write(f"**Description:** {rack.description}")
                 st.write(f"**Species:** {s.name if s else 'N/A'}")
                 st.write(f"**Variety:** {v.name if v else 'N/A'}")
                 st.write("**Metadata:**")
@@ -134,7 +156,7 @@ if racks_list:
                     st.write(f"- **{k}:** {val}")
             with col3:
                 if rack.qr_code_path:
-                    st.image(rack.qr_code_path, use_container_width=True)
+                    st.image(rack.qr_code_path, width=150)
                     with open(rack.qr_code_path, "rb") as file:
                         st.download_button(
                             label="Download Label",
@@ -145,10 +167,84 @@ if racks_list:
                         )
                 if is_admin():
                     st.write("---")
-                    if st.button("Delete Rack", key=f"del_{rack.id}", type="primary"):
-                        session.delete(rack)
-                        session.commit()
-                        log_audit(session, "DELETE", "Rack", rack.id)
-                        st.rerun()
+                    col_del, col_edit = st.columns(2)
+                    with col_del:
+                        if st.button("Delete Rack", key=f"del_{rack.id}", type="primary"):
+                            rack_id_str = rack.rack_identifier
+                            rack_img = rack.image_url
+                            rack_qr = rack.qr_code_path
+                            session.delete(rack)
+                            session.commit()
+                            log_audit(session, "DELETE", "Rack", rack.id)
+                            from modules.image_utils import safe_remove_file
+                            safe_remove_file(rack_img)
+                            safe_remove_file(rack_qr)
+                            st.session_state.toast_message = f"Rack '{rack_id_str}' deleted."
+                            st.rerun()
+                    with col_edit:
+                        with st.expander("Edit"):
+                            with st.form(f"edit_rack_form_{rack.id}"):
+                                edit_r_variety = st.selectbox(
+                                    "Select Variety",
+                                    [v_item.id for v_item in varieties_list],
+                                    index=[v_item.id for v_item in varieties_list].index(rack.variety_id) if rack.variety_id in [v_item.id for v_item in varieties_list] else 0,
+                                    format_func=lambda x: next((v_item.name for v_item in varieties_list if v_item.id == x), str(x)),
+                                    key=f"edit_variety_{rack.id}"
+                                )
+                                edit_r_name = st.text_input("Rack Name", value=rack.name if rack.name else "", key=f"edit_name_{rack.id}")
+                                edit_r_desc = st.text_area("Rack Description", value=rack.description if rack.description else "", key=f"edit_desc_{rack.id}")
+                                
+                                ev_obj = session.get(Variety, edit_r_variety)
+                                es_obj = session.get(Species, ev_obj.species_id) if ev_obj else None
+                                
+                                edit_schema = []
+                                if es_obj:
+                                    try:
+                                        edit_schema = json.loads(es_obj.metadata_schema)
+                                    except:
+                                        pass
+                                
+                                st.write("**Edit Metadata**")
+                                edit_meta_values = {}
+                                ecols = st.columns(2)
+                                current_meta = rack.metadata_dict
+                                
+                                for i, field in enumerate(edit_schema):
+                                    fname = field.get("name", f"Field {i}")
+                                    ftype = field.get("type", "text")
+                                    current_val = current_meta.get(fname, field.get("default", ""))
+                                    
+                                    with ecols[i % 2]:
+                                        if ftype == "number":
+                                            try:
+                                                def_val = float(current_val)
+                                            except:
+                                                def_val = 0.0
+                                            edit_meta_values[fname] = st.number_input(fname, value=def_val, key=f"edit_field_{fname}_{rack.id}")
+                                        else:
+                                            edit_meta_values[fname] = st.text_input(fname, value=str(current_val), key=f"edit_field_{fname}_{rack.id}")
+                                
+                                edit_r_image = st.file_uploader("Replace Rack Image", type=['jpg', 'jpeg', 'png'], key=f"edit_img_{rack.id}")
+                                
+                                if st.form_submit_button("Save Changes"):
+                                    rack_to_edit = session.get(Rack, rack.id)
+                                    rack_to_edit.variety_id = edit_r_variety
+                                    rack_to_edit.name = edit_r_name.strip() if edit_r_name.strip() else None
+                                    rack_to_edit.description = edit_r_desc.strip() if edit_r_desc.strip() else None
+                                    rack_to_edit.metadata_json = json.dumps(edit_meta_values)
+                                    
+                                    if edit_r_image:
+                                        old_img = rack_to_edit.image_url
+                                        img_path = process_and_save_image(edit_r_image)
+                                        rack_to_edit.image_url = img_path
+                                        if old_img:
+                                            from modules.image_utils import safe_remove_file
+                                            safe_remove_file(old_img)
+                                        
+                                    session.add(rack_to_edit)
+                                    session.commit()
+                                    log_audit(session, "UPDATE", "Rack", rack.id, f"Edited: {rack.rack_identifier}")
+                                    st.session_state.toast_message = f"Rack '{rack.rack_identifier}' updated successfully!"
+                                    st.rerun()
 else:
     st.info("No racks found matching criteria.")
