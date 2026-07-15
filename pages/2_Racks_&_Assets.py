@@ -138,10 +138,7 @@ if racks_list:
         with st.expander(f"Rack: {rack_label} | {v.name if v else 'Unknown'}"):
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
-                if rack.image_url:
-                    st.image(rack.image_url, use_container_width=True)
-                else:
-                    st.info("No image available.")
+                st.info("Image Here")
             with col2:
                 st.write(f"**Rack ID:** {rack.rack_identifier}")
                 if rack.name:
@@ -157,10 +154,12 @@ if racks_list:
             with col3:
                 if rack.qr_code_path:
                     st.image(rack.qr_code_path, width=150)
-                    with open(rack.qr_code_path, "rb") as file:
+                    from modules.qr_utils import get_qr_bytes
+                    qr_bytes = get_qr_bytes(rack.qr_code_path)
+                    if qr_bytes:
                         st.download_button(
                             label="Download Label",
-                            data=file,
+                            data=qr_bytes,
                             file_name=f"{rack.rack_identifier}_QR.png",
                             mime="image/png",
                             key=f"dl_{rack.id}"

@@ -55,8 +55,7 @@ session.commit()
 
 # 3. Add Racks
 def process_img(path):
-    if not os.path.exists(path): return None
-    return process_and_save_image(path)
+    return process_and_save_image(None)
 
 img1 = r"C:\Users\Administrator\.gemini\antigravity\brain\801438ae-d695-472e-9a33-d3156e7a9f52\arabidopsis_rack_1784052079471.png"
 img2 = r"C:\Users\Administrator\.gemini\antigravity\brain\801438ae-d695-472e-9a33-d3156e7a9f52\rice_rack_1784052087641.png"

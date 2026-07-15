@@ -4,10 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-DB_PATH = os.getenv("DB_PATH", "data/inventory.db")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+DB_PATH = os.getenv("DB_PATH", "data/inventory_v2.db")
 
-sqlite_url = f"sqlite:///{DB_PATH}"
+if DB_PATH.startswith("postgresql://") or DB_PATH.startswith("postgres://"):
+    # Convert postgres:// to postgresql:// as required by newer SQLAlchemy versions
+    sqlite_url = DB_PATH.replace("postgres://", "postgresql://")
+else:
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    sqlite_url = f"sqlite:///{DB_PATH}"
+
 engine = create_engine(sqlite_url, echo=False)
 
 def create_db_and_tables():

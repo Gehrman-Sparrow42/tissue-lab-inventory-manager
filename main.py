@@ -33,8 +33,7 @@ if "type" in st.query_params and "id" in st.query_params:
                 st.info(f"**Rack:** {rack.name if rack.name else rack.rack_identifier}")
                 col1, col2, col3 = st.columns([1, 1, 1])
                 with col1:
-                    if rack.image_url:
-                        st.image(rack.image_url, use_container_width=True, caption="Rack Image")
+                    st.info("Image Here")
                 with col2:
                     st.write(f"**Rack ID:** {rack.rack_identifier}")
                     st.write(f"**Description:** {rack.description if rack.description else 'No description provided.'}")
@@ -47,8 +46,10 @@ if "type" in st.query_params and "id" in st.query_params:
                 with col3:
                     if rack.qr_code_path:
                         st.image(rack.qr_code_path, width=150, caption="QR Code")
-                        with open(rack.qr_code_path, "rb") as file:
-                            st.download_button(label="Download QR", data=file, file_name=f"Rack_{rack.rack_identifier}_QR.png", mime="image/png", key="dl_qr_rack")
+                        from modules.qr_utils import get_qr_bytes
+                        qr_bytes = get_qr_bytes(rack.qr_code_path)
+                        if qr_bytes:
+                            st.download_button(label="Download QR", data=qr_bytes, file_name=f"Rack_{rack.rack_identifier}_QR.png", mime="image/png", key="dl_qr_rack")
             else:
                 st.error("Rack not found.")
         except Exception:
@@ -76,8 +77,10 @@ if "type" in st.query_params and "id" in st.query_params:
                 with col2:
                     if v.qr_code_path:
                         st.image(v.qr_code_path, width=150, caption="QR Code")
-                        with open(v.qr_code_path, "rb") as file:
-                            st.download_button(label="Download QR", data=file, file_name=f"Variety_{v.id}_QR.png", mime="image/png", key="dl_qr_var")
+                        from modules.qr_utils import get_qr_bytes
+                        qr_bytes = get_qr_bytes(v.qr_code_path)
+                        if qr_bytes:
+                            st.download_button(label="Download QR", data=qr_bytes, file_name=f"Variety_{v.id}_QR.png", mime="image/png", key="dl_qr_var")
             else:
                 st.error("Variety not found.")
         except:
@@ -103,8 +106,10 @@ if "type" in st.query_params and "id" in st.query_params:
                 with col2:
                     if s.qr_code_path:
                         st.image(s.qr_code_path, width=150, caption="QR Code")
-                        with open(s.qr_code_path, "rb") as file:
-                            st.download_button(label="Download QR", data=file, file_name=f"Species_{s.id}_QR.png", mime="image/png", key="dl_qr_spec")
+                        from modules.qr_utils import get_qr_bytes
+                        qr_bytes = get_qr_bytes(s.qr_code_path)
+                        if qr_bytes:
+                            st.download_button(label="Download QR", data=qr_bytes, file_name=f"Species_{s.id}_QR.png", mime="image/png", key="dl_qr_spec")
             else:
                 st.error("Species not found.")
         except:

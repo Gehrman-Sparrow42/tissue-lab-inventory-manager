@@ -141,8 +141,10 @@ else:
             with col_s2:
                 if s.qr_code_path:
                     st.image(s.qr_code_path, width=120)
-                    with open(s.qr_code_path, "rb") as file:
-                        st.download_button(label="Download QR", data=file, file_name=f"Species_{s.id}_QR.png", mime="image/png", key=f"dl_s_{s.id}")
+                    from modules.qr_utils import get_qr_bytes
+                    qr_bytes = get_qr_bytes(s.qr_code_path)
+                    if qr_bytes:
+                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Species_{s.id}_QR.png", mime="image/png", key=f"dl_s_{s.id}")
             
             st.write("---")
             st.markdown(f"##### Varieties of {s.name}")
