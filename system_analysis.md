@@ -1,11 +1,11 @@
-# ETAE Laboratory Inventory - System Analysis Report
+# Laboratory Inventory - System Analysis Report
 
-This report provides an in-depth structural review of the ETAE Laboratory Inventory Management system. It details the current architectural state, database schemas, dynamic form mechanics, QR generation pipelines, and potential improvement angles for future scaling.
+This report provides an in-depth structural review of the Laboratory Inventory Management system. It details the current architectural state, database schemas, dynamic form mechanics, QR generation pipelines, and potential improvement angles for future scaling.
 
 ---
 
 ## 1. Executive Summary
-The ETAE Inventory system is a single-server, lightweight Web application built with **Streamlit** and **SQLModel** (built on top of SQLAlchemy and Pydantic). It is designed to manage laboratory biological subjects hierarchically (Species ➔ Varieties ➔ Racks) and track physical containers via deep-linked QR labels.
+The Laboratory Inventory system is a single-server, lightweight Web application built with **Streamlit** and **SQLModel** (built on top of SQLAlchemy and Pydantic). It is designed to manage laboratory biological subjects hierarchically (Species ➔ Varieties ➔ Racks) and track physical containers via deep-linked QR labels.
 
 Following recent improvements, the system is fully operational with zero-leak file tracking, type-safe metadata validations, and comprehensive audit logs.
 

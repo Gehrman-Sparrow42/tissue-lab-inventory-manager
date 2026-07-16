@@ -6,7 +6,7 @@ from sqlmodel import select
 import pandas as pd
 
 st.set_page_config(
-    page_title="ETAE Lab Inventory",
+    page_title="Lab Inventory",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded"
@@ -120,11 +120,11 @@ if "type" in st.query_params and "id" in st.query_params:
         st.rerun()
 
 else:
-    st.title("ETAE Laboratory Inventory Management System")
+    st.title("Laboratory Inventory Management System")
 
     def render_overview():
         st.markdown("""
-        Welcome to the ETAE Laboratory Inventory Management System.
+        Welcome to the Laboratory Inventory Management System.
 
         ### Features
         - **QR Codes**: Generate QR code sheets for Species, Varieties, and Racks to access details instantly.
