@@ -11,4 +11,6 @@ assets/qrcodes/
 *.lnk
 .agents/
 skills-lock.json
+.pytest_cache/
+.ruff_cache/
 

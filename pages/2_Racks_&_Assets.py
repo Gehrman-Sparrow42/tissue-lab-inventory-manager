@@ -1,253 +1,391 @@
-import streamlit as st
-from sqlmodel import select
-from modules.database import get_session, log_audit
-from modules.models import Species, Variety, Rack
-from modules.auth import is_admin, render_auth_ui
-from modules.qr_utils import generate_qr_code
-from modules.image_utils import process_and_save_image
+import hashlib
 import json
 import uuid
+from collections import Counter
+
+import streamlit as st
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlmodel import select
+
+from modules.auth import is_admin, render_auth_ui
+from modules.database import create_db_and_tables, get_session, log_audit
+from modules.image_utils import get_image_path, process_and_save_image, safe_remove_file
+from modules.metadata_ui import render_metadata_fields
+from modules.models import Rack, Species, Variety, Vessel
+from modules.qr_utils import generate_qr_code, get_qr_bytes
+from modules.validation import validate_metadata_values
+
+
+def metadata_prefix(prefix, variety_id, schema):
+    return f"{prefix}_{variety_id}_{hashlib.sha256(schema.encode()).hexdigest()[:12]}"
+
+
+def remove_unreferenced_image(session, path):
+    managed_path = get_image_path(path)
+    if managed_path is None:
+        return
+    saved_paths = session.exec(select(Rack.image_url)).all()
+    if not any(get_image_path(saved) == managed_path for saved in saved_paths):
+        safe_remove_file(managed_path)
+
+
+def metadata_fields(schema, current, prefix):
+    try:
+        return render_metadata_fields(schema, current, prefix)
+    except (ValueError, TypeError) as exc:
+        st.error(f"Invalid metadata schema: {exc}")
+        return None
+
 
 st.set_page_config(page_title="Racks & Assets", page_icon=None, layout="wide")
+create_db_and_tables()
 render_auth_ui()
-
-# Display persistent toast feedback if any
-if "toast_message" in st.session_state and st.session_state.toast_message:
-    st.toast(st.session_state.toast_message)
-    del st.session_state.toast_message
-
+if st.session_state.get("toast_message"):
+    st.toast(st.session_state.pop("toast_message"))
 st.title("Racks & Assets Management")
 
-session = get_session()
+with get_session() as session:
+    filter_v_id = st.session_state.get("filter_variety_id")
+    varieties = session.exec(select(Variety)).all()
+    varieties_by_id = {v.id: v for v in varieties}
+    species_by_id = {s.id: s for s in session.exec(select(Species)).all()}
+    ids = [v.id for v in varieties]
+    variety_labels = {}
+    for variety in varieties:
+        species = species_by_id.get(variety.species_id)
+        variety_labels[variety.id] = (
+            f"{species.name if species else 'Unknown'} / {variety.name}"
+        )
+    label_counts = Counter(variety_labels.values())
+    for variety_id, label in variety_labels.items():
+        if label_counts[label] > 1:
+            variety_labels[variety_id] = f"{label} (ID {variety_id})"
 
-# Handling interconnected filtering
-filter_v_id = st.session_state.get("filter_variety_id", None)
-if filter_v_id:
-    v_obj = session.get(Variety, filter_v_id)
-    if v_obj:
-        st.success(f"Currently viewing racks for Variety: **{v_obj.name}**")
+    def variety_label(variety_id):
+        return variety_labels[variety_id]
+
+    if filter_v_id in varieties_by_id:
+        st.success(
+            f"Currently viewing racks for Variety: **{varieties_by_id[filter_v_id].name}**"
+        )
         if st.button("Clear Filter to Show All Racks"):
             st.session_state.filter_variety_id = None
-            st.session_state.toast_message = "Filter cleared."
             st.rerun()
-        st.write("---")
+    elif filter_v_id:
+        filter_v_id = None
+    search = st.text_input("Global Search (Rack ID, Metadata)", "")
 
-search_query = st.text_input("Global Search (Rack ID, Metadata)", "")
-
-with st.spinner("Loading database records..."):
-    varieties_list = session.exec(select(Variety)).all()
-    varieties_dict = {v.id: v for v in varieties_list}
-    species_dict = {s.id: s for s in session.exec(select(Species)).all()}
-
-if is_admin() and varieties_list:
-    with st.expander("Add New Rack", expanded=False):
-        # Pre-select variety if filtering
-        default_index = 0
-        if filter_v_id:
-            for idx, var in enumerate(varieties_list):
-                if var.id == filter_v_id:
-                    default_index = idx
-                    break
-                    
-        r_variety = st.selectbox("Select Variety for New Rack", [v.id for v in varieties_list], index=default_index, format_func=lambda x: next((v.name for v in varieties_list if v.id == x), str(x)))
-        
-        if r_variety:
-            selected_v = session.get(Variety, r_variety)
-            selected_s = session.get(Species, selected_v.species_id)
-            
-            schema = []
-            try:
-                schema = json.loads(selected_s.metadata_schema)
-            except:
-                st.warning("Invalid metadata schema in Species configuration.")
-                
-            with st.form("add_rack_form"):
-                r_id = st.text_input("Rack Identifier (Leave blank to auto-generate)")
-                r_name = st.text_input("Rack Name (Optional)")
-                r_desc = st.text_area("Rack Description (Optional)")
-                
-                st.write(f"**Metadata Configuration for {selected_s.name}**")
-                meta_values = {}
-                cols = st.columns(2)
-                for i, field in enumerate(schema):
-                    fname = field.get("name", f"Field {i}")
-                    ftype = field.get("type", "text")
-                    fdef = field.get("default", "")
-                    
-                    with cols[i % 2]:
-                        if ftype == "number":
-                            try:
-                                def_val = float(fdef) if fdef else 0.0
-                            except:
-                                def_val = 0.0
-                            meta_values[fname] = st.number_input(fname, value=def_val)
+    if is_admin() and varieties:
+        with st.expander("Add New Rack"):
+            variety_id = st.selectbox(
+                "Select Variety for New Rack",
+                ids,
+                index=ids.index(filter_v_id) if filter_v_id in ids else 0,
+                format_func=variety_label,
+            )
+            species = species_by_id.get(varieties_by_id[variety_id].species_id)
+            if species:
+                schema = species.metadata_schema
+                with st.form("add_rack_form"):
+                    identifier = st.text_input(
+                        "Rack Identifier (Leave blank to auto-generate)"
+                    )
+                    name = st.text_input("Rack Name (Optional)")
+                    description = st.text_area("Rack Description (Optional)")
+                    st.write(f"**Metadata Configuration for {species.name}**")
+                    values = metadata_fields(
+                        schema, {}, metadata_prefix("new", variety_id, schema)
+                    )
+                    upload = st.file_uploader(
+                        "Upload Rack Image", type=["jpg", "jpeg", "png"]
+                    )
+                    if st.form_submit_button("Create Rack") and values is not None:
+                        image = None
+                        try:
+                            values = validate_metadata_values(values, schema)
+                            identifier = (
+                                identifier.strip()
+                                or f"RACK-{uuid.uuid4().hex[:8].upper()}"
+                            )
+                            if session.exec(
+                                select(Rack).where(Rack.rack_identifier == identifier)
+                            ).first():
+                                raise ValueError("Rack ID already exists.")
+                            image = process_and_save_image(upload) if upload else None
+                            rack = Rack(
+                                rack_identifier=identifier,
+                                variety_id=variety_id,
+                                name=name.strip() or None,
+                                description=description.strip() or None,
+                                image_url=image,
+                                qr_code_path=generate_qr_code(identifier, "rack"),
+                                metadata_json=json.dumps(values),
+                            )
+                            session.add(rack)
+                            session.flush()
+                            log_audit(
+                                session,
+                                "CREATE",
+                                "Rack",
+                                rack.id,
+                                f"Created rack {identifier}",
+                            )
+                            session.commit()
+                        except (ValueError, SQLAlchemyError, OSError) as exc:
+                            session.rollback()
+                            if image:
+                                remove_unreferenced_image(session, image)
+                            st.error(
+                                "Rack ID already exists or the selected variety no longer exists."
+                                if isinstance(exc, IntegrityError)
+                                else "Database operation failed."
+                                if isinstance(exc, SQLAlchemyError)
+                                else str(exc)
+                            )
                         else:
-                            meta_values[fname] = st.text_input(fname, value=str(fdef))
-                
-                st.write("---")
-                r_image = st.file_uploader("Upload Rack Image", type=['jpg', 'jpeg', 'png'])
-                
-                submitted = st.form_submit_button("Create Rack")
-                if submitted:
-                    if not r_id.strip():
-                        r_id = f"RACK-{uuid.uuid4().hex[:8].upper()}"
-                    
-                    existing = session.exec(select(Rack).where(Rack.rack_identifier == r_id)).first()
-                    if existing:
-                        st.error("Rack ID already exists.")
-                    else:
-                        img_path = process_and_save_image(r_image) if r_image else None
-                        qr_path = generate_qr_code(r_id, "rack")
-                        
-                        new_rack = Rack(
-                            rack_identifier=r_id,
-                            variety_id=r_variety,
-                            name=r_name.strip() if r_name.strip() else None,
-                            description=r_desc.strip() if r_desc.strip() else None,
-                            qr_code_path=qr_path,
-                            image_url=img_path,
-                            metadata_json=json.dumps(meta_values)
+                            st.session_state.toast_message = (
+                                f"Rack '{identifier}' created successfully!"
+                            )
+                            st.rerun()
+            else:
+                st.error("The selected variety has no species.")
+
+    st.subheader("Rack Inventory")
+    query = select(Rack)
+    if filter_v_id:
+        query = query.where(Rack.variety_id == filter_v_id)
+    racks = session.exec(query).all()
+    if search:
+        q = search.lower()
+        racks = [
+            r
+            for r in racks
+            if q
+            in " ".join(
+                [r.rack_identifier, r.name or "", r.description or "", r.metadata_json]
+            ).lower()
+        ]
+    if not racks:
+        st.info("No racks found matching criteria.")
+    for rack in racks:
+        variety = varieties_by_id.get(rack.variety_id)
+        species = species_by_id.get(variety.species_id) if variety else None
+        label = (
+            f"{rack.name} ({rack.rack_identifier})"
+            if rack.name
+            else rack.rack_identifier
+        )
+        try:
+            current_metadata = rack.metadata_dict
+            metadata_error = None
+        except ValueError as exc:
+            current_metadata = None
+            metadata_error = str(exc)
+        with st.expander(f"Rack: {label} | {variety.name if variety else 'Unknown'}"):
+            if metadata_error:
+                st.error(
+                    f"Invalid saved metadata: {metadata_error}. Repair the raw metadata before editing this rack."
+                )
+                st.code(rack.metadata_json)
+                if is_admin():
+                    with st.form(f"repair_metadata_{rack.id}"):
+                        replacement = st.text_area(
+                            "Corrected Metadata (JSON)",
+                            value=rack.metadata_json,
+                            key=f"repair_raw_{rack.id}",
                         )
-                        session.add(new_rack)
-                        session.commit()
-                        log_audit(session, "CREATE", "Rack", new_rack.id, r_id)
-                        st.session_state.toast_message = f"Rack '{r_id}' created successfully!"
-                        st.rerun()
-
-st.subheader("Rack Inventory")
-
-query = select(Rack)
-if filter_v_id:
-    query = query.where(Rack.variety_id == filter_v_id)
-    
-with st.spinner("Loading racks..."):
-    racks_list = session.exec(query).all()
-
-if search_query:
-    q = search_query.lower()
-    racks_list = [
-        r for r in racks_list 
-        if q in r.rack_identifier.lower() 
-        or (r.name and q in r.name.lower())
-        or (r.description and q in r.description.lower())
-        or any(q in str(val).lower() for val in r.metadata_dict.values())
-    ]
-
-if racks_list:
-    for rack in racks_list:
-        v = varieties_dict.get(rack.variety_id)
-        s = species_dict.get(v.species_id) if v else None
-        
-        rack_label = f"{rack.name} ({rack.rack_identifier})" if rack.name else rack.rack_identifier
-        with st.expander(f"Rack: {rack_label} | {v.name if v else 'Unknown'}"):
+                        st.caption(
+                            "Save a JSON object. The original raw value will be retained in the audit log."
+                        )
+                        if st.form_submit_button("Repair Metadata"):
+                            try:
+                                repaired = json.loads(replacement)
+                                if not isinstance(repaired, dict):
+                                    raise ValueError(  # noqa: TRY004 — invalid submitted JSON uses ValueError
+                                        "Corrected metadata must be a JSON object."
+                                    )
+                                original_raw = rack.metadata_json
+                                rack.metadata_json = json.dumps(
+                                    repaired, ensure_ascii=False, allow_nan=False
+                                )
+                                log_audit(
+                                    session,
+                                    "REPAIR",
+                                    "Rack",
+                                    rack.id,
+                                    json.dumps(
+                                        {
+                                            "rack_identifier": rack.rack_identifier,
+                                            "original_metadata": original_raw,
+                                            "replacement_metadata": repaired,
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                )
+                                session.commit()
+                            except (ValueError, SQLAlchemyError) as exc:
+                                session.rollback()
+                                st.error(
+                                    "Metadata repair could not be saved. Try again."
+                                    if isinstance(exc, SQLAlchemyError)
+                                    else str(exc)
+                                )
+                            else:
+                                st.session_state.toast_message = f"Metadata repaired for rack '{rack.rack_identifier}'."
+                                st.rerun()
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
-                st.info("Image Here")
+                image_path = get_image_path(rack.image_url)
+                if image_path:
+                    st.image(image_path)
+                else:
+                    st.caption("No image available")
             with col2:
                 st.write(f"**Rack ID:** {rack.rack_identifier}")
                 if rack.name:
                     st.write(f"**Name:** {rack.name}")
                 if rack.description:
                     st.write(f"**Description:** {rack.description}")
-                st.write(f"**Species:** {s.name if s else 'N/A'}")
-                st.write(f"**Variety:** {v.name if v else 'N/A'}")
+                st.write(f"**Species:** {species.name if species else 'N/A'}")
+                st.write(f"**Variety:** {variety.name if variety else 'N/A'}")
                 st.write("**Metadata:**")
-                meta = rack.metadata_dict
-                for k, val in meta.items():
-                    st.write(f"- **{k}:** {val}")
+                for key, value in (current_metadata or {}).items():
+                    st.write(f"- **{key}:** {value}")
             with col3:
-                from modules.qr_utils import generate_qr_code, get_qr_bytes
-                qr_url = generate_qr_code(rack.rack_identifier, "rack")
-                st.image(qr_url, width=150)
-                qr_bytes = get_qr_bytes(qr_url)
+                try:
+                    qr = generate_qr_code(rack.rack_identifier, "rack")
+                    qr_bytes = get_qr_bytes(qr)
+                except (ValueError, OSError) as exc:
+                    qr_bytes = b""
+                    st.error(f"Could not generate rack label: {exc}")
                 if qr_bytes:
+                    st.image(qr_bytes, width=150)
                     st.download_button(
-                        label="Download Label",
-                        data=qr_bytes,
+                        "Download Label",
+                        qr_bytes,
                         file_name=f"{rack.rack_identifier}_QR.png",
                         mime="image/png",
-                        key=f"dl_{rack.id}"
+                        key=f"dl_{rack.id}",
                     )
-                if is_admin():
-                    st.write("---")
-                    col_del, col_edit = st.columns(2)
-                    with col_del:
-                        if st.button("Delete Rack", key=f"del_{rack.id}", type="primary"):
-                            rack_id_str = rack.rack_identifier
-                            rack_img = rack.image_url
-                            rack_qr = rack.qr_code_path
+                if is_admin() and st.button(
+                    "Delete Rack", key=f"del_{rack.id}", type="primary"
+                ):
+                    if session.exec(
+                        select(Vessel).where(Vessel.rack_id == rack.id)
+                    ).first():
+                        st.error(
+                            "Cannot delete a rack containing vessels. Move or delete its vessels first."
+                        )
+                    else:
+                        identifier, image, record_id = (
+                            rack.rack_identifier,
+                            rack.image_url,
+                            rack.id,
+                        )
+                        try:
                             session.delete(rack)
+                            session.flush()
+                            log_audit(
+                                session,
+                                "DELETE",
+                                "Rack",
+                                record_id,
+                                f"Deleted rack {identifier}",
+                            )
                             session.commit()
-                            log_audit(session, "DELETE", "Rack", rack.id)
-                            from modules.image_utils import safe_remove_file
-                            safe_remove_file(rack_img)
-                            safe_remove_file(rack_qr)
-                            st.session_state.toast_message = f"Rack '{rack_id_str}' deleted."
+                        except SQLAlchemyError:
+                            session.rollback()
+                            st.error(
+                                "Cannot delete this rack because it is still in use."
+                            )
+                        else:
+                            remove_unreferenced_image(session, image)
+                            st.session_state.toast_message = (
+                                f"Rack '{identifier}' deleted."
+                            )
                             st.rerun()
-                    with col_edit:
-                        with st.expander("Edit"):
-                            with st.form(f"edit_rack_form_{rack.id}"):
-                                edit_r_variety = st.selectbox(
-                                    "Select Variety",
-                                    [v_item.id for v_item in varieties_list],
-                                    index=[v_item.id for v_item in varieties_list].index(rack.variety_id) if rack.variety_id in [v_item.id for v_item in varieties_list] else 0,
-                                    format_func=lambda x: next((v_item.name for v_item in varieties_list if v_item.id == x), str(x)),
-                                    key=f"edit_variety_{rack.id}"
-                                )
-                                edit_r_name = st.text_input("Rack Name", value=rack.name if rack.name else "", key=f"edit_name_{rack.id}")
-                                edit_r_desc = st.text_area("Rack Description", value=rack.description if rack.description else "", key=f"edit_desc_{rack.id}")
-                                
-                                ev_obj = session.get(Variety, edit_r_variety)
-                                es_obj = session.get(Species, ev_obj.species_id) if ev_obj else None
-                                
-                                edit_schema = []
-                                if es_obj:
-                                    try:
-                                        edit_schema = json.loads(es_obj.metadata_schema)
-                                    except:
-                                        pass
-                                
-                                st.write("**Edit Metadata**")
-                                edit_meta_values = {}
-                                ecols = st.columns(2)
-                                current_meta = rack.metadata_dict
-                                
-                                for i, field in enumerate(edit_schema):
-                                    fname = field.get("name", f"Field {i}")
-                                    ftype = field.get("type", "text")
-                                    current_val = current_meta.get(fname, field.get("default", ""))
-                                    
-                                    with ecols[i % 2]:
-                                        if ftype == "number":
-                                            try:
-                                                def_val = float(current_val)
-                                            except:
-                                                def_val = 0.0
-                                            edit_meta_values[fname] = st.number_input(fname, value=def_val, key=f"edit_field_{fname}_{rack.id}")
-                                        else:
-                                            edit_meta_values[fname] = st.text_input(fname, value=str(current_val), key=f"edit_field_{fname}_{rack.id}")
-                                
-                                edit_r_image = st.file_uploader("Replace Rack Image", type=['jpg', 'jpeg', 'png'], key=f"edit_img_{rack.id}")
-                                
-                                if st.form_submit_button("Save Changes"):
-                                    rack_to_edit = session.get(Rack, rack.id)
-                                    rack_to_edit.variety_id = edit_r_variety
-                                    rack_to_edit.name = edit_r_name.strip() if edit_r_name.strip() else None
-                                    rack_to_edit.description = edit_r_desc.strip() if edit_r_desc.strip() else None
-                                    rack_to_edit.metadata_json = json.dumps(edit_meta_values)
-                                    
-                                    if edit_r_image:
-                                        old_img = rack_to_edit.image_url
-                                        img_path = process_and_save_image(edit_r_image)
-                                        rack_to_edit.image_url = img_path
-                                        if old_img:
-                                            from modules.image_utils import safe_remove_file
-                                            safe_remove_file(old_img)
-                                        
-                                    session.add(rack_to_edit)
+            if is_admin() and ids and current_metadata is not None:
+                with st.expander("Edit"):
+                    selected_id = st.selectbox(
+                        "Select Variety",
+                        ids,
+                        index=ids.index(rack.variety_id)
+                        if rack.variety_id in ids
+                        else 0,
+                        format_func=variety_label,
+                        key=f"edit_variety_{rack.id}",
+                    )
+                    selected_species = species_by_id.get(
+                        varieties_by_id[selected_id].species_id
+                    )
+                    if selected_species:
+                        schema = selected_species.metadata_schema
+                        with st.form(f"edit_rack_form_{rack.id}"):
+                            name = st.text_input(
+                                "Rack Name",
+                                value=rack.name or "",
+                                key=f"edit_name_{rack.id}",
+                            )
+                            description = st.text_area(
+                                "Rack Description",
+                                value=rack.description or "",
+                                key=f"edit_desc_{rack.id}",
+                            )
+                            st.write("**Edit Metadata**")
+                            values = metadata_fields(
+                                schema,
+                                current_metadata,
+                                metadata_prefix(f"edit_{rack.id}", selected_id, schema),
+                            )
+                            upload = st.file_uploader(
+                                "Replace Rack Image",
+                                type=["jpg", "jpeg", "png"],
+                                key=f"edit_img_{rack.id}",
+                            )
+                            if (
+                                st.form_submit_button("Save Changes")
+                                and values is not None
+                            ):
+                                image = None
+                                old_image = rack.image_url
+                                try:
+                                    values = validate_metadata_values(values, schema)
+                                    image = (
+                                        process_and_save_image(upload)
+                                        if upload
+                                        else None
+                                    )
+                                    rack.variety_id = selected_id
+                                    rack.name = name.strip() or None
+                                    rack.description = description.strip() or None
+                                    rack.metadata_json = json.dumps(values)
+                                    if image:
+                                        rack.image_url = image
+                                    session.add(rack)
+                                    session.flush()
+                                    log_audit(
+                                        session,
+                                        "UPDATE",
+                                        "Rack",
+                                        rack.id,
+                                        f"Edited rack {rack.rack_identifier}",
+                                    )
                                     session.commit()
-                                    log_audit(session, "UPDATE", "Rack", rack.id, f"Edited: {rack.rack_identifier}")
+                                except (ValueError, SQLAlchemyError, OSError) as exc:
+                                    session.rollback()
+                                    if image:
+                                        remove_unreferenced_image(session, image)
+                                    st.error(
+                                        "The selected variety no longer exists."
+                                        if isinstance(exc, IntegrityError)
+                                        else "Database operation failed."
+                                        if isinstance(exc, SQLAlchemyError)
+                                        else str(exc)
+                                    )
+                                else:
+                                    if image and old_image != image:
+                                        remove_unreferenced_image(session, old_image)
                                     st.session_state.toast_message = f"Rack '{rack.rack_identifier}' updated successfully!"
                                     st.rerun()
-else:
-    st.info("No racks found matching criteria.")
+                    else:
+                        st.error("The selected variety has no species.")

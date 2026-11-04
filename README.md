@@ -1,119 +1,49 @@
-# laboratory-inventory-manager
+# Laboratory Inventory Manager
 
-Hierarchical specimen tracking, dynamic schema management, and QR-indexed container management system for biological and tissue culture laboratories.
+A Streamlit inventory for species, varieties, racks and individual vessels. Species define rack metadata fields. Rack photos and QR labels are stored locally, and QR images are generated without an external service.
 
-## Overview
+## Setup
 
-Laboratory Inventory Manager is a web application engineered for research and tissue culture laboratories to track biological specimens hierarchically (Species, Varieties, Racks, and Vials). It enables researchers to define dynamic, per-species JSON metadata schemas, generate deep-linked QR asset labels for physical storage racks, and maintain verifiable database audit trails through an intuitive Streamlit interface.
+1. Install Python 3.10 or newer and dependencies with `python -m pip install -r requirements.txt`.
+2. Copy `.env.example` to `.env`. Set a private `ADMIN_PASSWORD`. Admin editing is disabled when the password is absent or a default placeholder.
+3. Set `DB_PATH` if needed. The default is `data/inventory_v2.db`. An existing legacy `data/inventory.db` is reused when the newer file does not exist. Relative paths resolve from the project folder, including bare filenames.
+4. Set `BASE_URL` to the HTTP(S) address reachable by the device scanning labels, such as the server's LAN address. The default `http://localhost:8501` works for scans on the server itself. Regenerate and reprint labels after changing the address.
+5. Run `python -m streamlit run main.py` and visit the displayed address.
 
-## Architecture and Pipeline
+In the C:\Tools workspace, use the shared Python environment and `C:\Tools\LAUNCHERS\Launch_Tissue_Lab_Inventory_Manager.bat`. This launcher binds to loopback. To use phones on a trusted LAN, start Streamlit with an appropriate listening address and set `BASE_URL` to the reachable server address.
 
-The application manages biological hierarchy and physical rack labeling through a modular database and presentation pipeline.
+## Inventory workflows
 
-```mermaid
-flowchart LR
-    A[Researcher / Laboratory Technician] --> B[Streamlit Web Interface]
-    B --> C[Authentication and Role Enforcement]
-    C --> D[Dynamic Schema Generator: Species and Varieties]
-    D --> E[SQLModel ORM Mapping Layer]
-    E --> F[(SQLite / PostgreSQL Persistent Storage)]
-    D --> G[QR Generation Service: qrcode + Pillow]
-    G --> H[Physical Storage Rack Labels: PNG]
-    B --> I[Audit Trail Logger]
-    I --> F
-```
+Guests can browse records and follow QR links. Admins can create and edit species, varieties, racks and vessels. Vessels record their parent rack, passage number, medium batch, optional subculture date, contamination status and notes. Parents containing child records cannot be deleted.
 
-- Hierarchical Modeling: Structures biological specimens across nested levels (`Species` -> `Variety` -> `Rack`), supporting custom schema fields per species.
-- Dynamic Schema Compilation: Metadata definitions (e.g. growth medium, pH, hormone concentrations, incubation dates) are validated against dynamically compiled JSON schemas.
-- Physical QR Routing: Generates deep-linked QR codes (`?type=rack&id=...`) for instant smartphone or barcode scanner retrieval of rack provenance and parameters.
-- Persistence Layer: Built on SQLModel (combining SQLAlchemy 2.0 and Pydantic) supporting local zero-setup SQLite or cloud-hosted PostgreSQL instances.
-- Audit Logging: Captures create, update, and deletion operations with UTC timestamps in dedicated audit log tables.
+Schema edits and parent changes retain existing metadata, including removed or renamed fields. New fields receive defaults. Existing values incompatible with a new numeric field remain visible and must be explicitly corrected before saving the rack. Admins can repair malformed legacy JSON in the rack page. The original raw payload is retained in the audit log when the corrected JSON is saved. Legacy duplicate variety names are retained. New collisions are blocked, and existing duplicates can be renamed without deleting records.
 
-## Tech Stack
+Each UI mutation and its audit event commit together. Delete events retain readable identifiers. Audit actor labels are entered during shared-password login and are self-reported. Five failed login attempts delay that browser session for one minute. Separate verified user accounts and server-wide login throttling are outside the current authentication model.
 
-| Component | Technology | Description |
-| :--- | :--- | :--- |
-| Runtime | Python 3.10+ | Primary language environment |
-| Frontend / Presentation | Streamlit 1.30+ | Multi-page laboratory application dashboard |
-| ORM / Validation | SQLModel, SQLAlchemy, Pydantic | Typed database entities and schema enforcement |
-| Database Engine | SQLite (default) / PostgreSQL | Relational storage for biological assets |
-| Asset Generation | qrcode (PIL), Pillow | Deep-linked QR label rendering and image processing |
-| Data Processing | Pandas | Tabular data export and inventory summaries |
+## Exports and backups
 
-## Project Structure
+The dashboard offers admin-only inventory CSV, printable bulk QR-label HTML, and audit CSV. The inventory export includes all hierarchy levels and raw rack metadata. Formula-like CSV cells are escaped for spreadsheet use. Open the label HTML in a browser and print it. It contains embedded QR images and works offline.
 
-```text
-tissue-lab-inv-manager/
-├── .env.example              # Environment variables template
-├── .gitignore                # Git exclusion patterns
-├── README.md                 # Technical documentation
-├── system_analysis.md        # Architectural review and schema specifications
-├── main.py                   # Main dashboard and QR routing entrypoint
-├── populate.py               # Test database seeding utility
-├── requirements.txt          # Python dependencies
-├── modules/                  # Application core modules
-│   ├── auth.py               # Administrative session controls
-│   ├── database.py           # SQLModel engine initialization and migrations
-│   ├── models.py             # Entity models (Species, Variety, Rack, AuditLog)
-│   └── qr_utils.py           # QR rendering and byte serialization
-└── pages/                    # Multi-page Streamlit views
-    ├── 1_Species_&_Varieties.py # Taxon and variety management
-    ├── 2_Racks_&_Containers.py  # Physical rack and batch management
-    └── 3_Audit_Logs.py          # Operational audit trail inspector
-```
+Use **Prepare Database Backup**, then **Export Database**, to download a consistent SQLite snapshot of the active database. Prepare a new snapshot to include subsequent changes. Back up `assets/images` separately to preserve uploaded photos. QR images under `assets/qrcodes` can be regenerated. PostgreSQL databases require a PostgreSQL backup tool.
 
-## Setup and Prerequisites
+New asset paths are project-relative, and legacy image paths can resolve by their managed image suffix after moving the project together with its assets. Images are validated, oriented from EXIF data, resized to at most 1600 × 1600 pixels and saved as JPEG. Previously discarded uploads cannot be recovered from placeholder paths.
 
-### Prerequisites
-- Python 3.10 or higher
-- Modern web browser for Streamlit interaction
+## Sample data
 
-### Installation
+Run `python populate.py path/to/new-example.db` to create illustrative records in a new SQLite file. Its parent directory must exist. The command refuses an existing file and records sample creation in the audit log.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Gehrman-Sparrow42/tissue-lab-inv-manager.git
-   cd tissue-lab-inv-manager
-   ```
+## Verification
 
-2. Initialize virtual environment:
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate
-   ```
+Install development dependencies with `python -m pip install -r requirements-dev.txt`. From the repository root, create the local `.agents` directory if needed, then run `python -m pytest tests --basetemp=.agents/pytest-work`. Tests use isolated temporary databases.
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+The regression suite covers metadata preservation, schema validation, legacy migrations, backups, login boundaries, taxonomy forms, rack moves, vessel lifecycle, managed images, offline QR generation and exports. Live PostgreSQL connectivity and physical phone/printer behavior require checks in the target environment.
 
-4. Configure environment:
-   ```bash
-   copy .env.example .env
-   ```
+## Source layout
 
-5. (Optional) Seed sample laboratory records:
-   ```bash
-   python populate.py
-   ```
-
-## Usage Examples
-
-### Launching the Laboratory Dashboard
-```bash
-streamlit run main.py
-```
-Open your browser at `http://localhost:8501`.
-
-### Environment Configuration
-
-| Variable | Default Value | Description |
-| :--- | :--- | :--- |
-| `DB_PATH` | `data/inventory_v2.db` | SQLite path or PostgreSQL connection URI |
-| `ADMIN_PASSWORD` | `admin` | Password for administrative modification modes |
-
-## Notes and Constraints
-
-- Dynamic Attributes: Species-level metadata schemas are stored as JSON strings. Validating deeply nested schema changes on existing racks requires re-saving the parent variety.
-- QR Physical Labeling: Generated QR labels are exported as 300x300 PNG files formatted for standard label printers.
-- Concurrency: For multi-user concurrent lab environments, configure `DB_PATH` to a hosted PostgreSQL instance rather than local SQLite.
+- `main.py` provides QR scan routing, exports and audit viewing.
+- `pages/1_Species_&_Varieties.py` manages taxonomy and metadata schemas.
+- `pages/2_Racks_&_Assets.py` manages racks, photos and metadata.
+- `pages/3_Vessels.py` manages individual vessels.
+- `modules/database.py` owns configuration, compatible migrations, audit staging and SQLite snapshots.
+- `modules/validation.py` validates schemas and preserves metadata during reconciliation.
+- `modules/qr_utils.py`, `modules/image_utils.py` and `modules/exports.py` supply local assets and downloads.

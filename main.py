@@ -1,173 +1,179 @@
+import csv
+import io
+
 import streamlit as st
-from modules.database import create_db_and_tables, get_session
-from modules.models import Species, Variety, Rack, AuditLog
-from modules.auth import render_auth_ui, is_admin
 from sqlmodel import select
-import pandas as pd
+
+from modules.auth import is_admin, render_auth_ui
+from modules.database import create_db_and_tables, get_session
+from modules.exports import _csv_value, inventory_csv, printable_labels
+from modules.image_utils import get_image_path
+from modules.models import AuditLog, Rack, Species, Variety, Vessel
+from modules.qr_utils import generate_qr_code, get_qr_bytes
 
 st.set_page_config(
-    page_title="Lab Inventory",
-    page_icon=None,
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Lab Inventory", layout="wide", initial_sidebar_state="auto"
 )
-
 create_db_and_tables()
 render_auth_ui()
 
-# Route QR parameters
-if "type" in st.query_params and "id" in st.query_params:
-    e_type = st.query_params["type"]
-    e_id = st.query_params["id"]
-    
-    session = get_session()
-    
-    st.markdown(f"## QR Scan Result: {e_type.capitalize()} Information")
-    
-    if e_type == "rack":
+
+def show_qr(kind, identifier):
+    try:
+        path = generate_qr_code(str(identifier), kind)
+    except (ValueError, OSError) as exc:
+        st.warning(f"QR label unavailable. {exc}")
+        return
+    st.image(get_qr_bytes(path), width=150, caption="QR code")
+    st.download_button(
+        "Download QR", get_qr_bytes(path), file_name=f"{kind}_qr.png", mime="image/png"
+    )
+
+
+def scan_view(session, kind, identifier):
+    if kind not in {"species", "variety", "rack", "vessel"}:
+        st.error("Unknown QR record type. Check the scanned link.")
+        return
+    if not identifier:
+        st.error("The QR link is missing its identifier.")
+        return
+    if kind in {"species", "variety"}:
         try:
-            rack = session.exec(select(Rack).where(Rack.rack_identifier == e_id)).first()
-            if rack:
-                v = session.get(Variety, rack.variety_id)
-                s = session.get(Species, v.species_id) if v else None
-                st.info(f"**Rack:** {rack.name if rack.name else rack.rack_identifier}")
-                col1, col2, col3 = st.columns([1, 1, 1])
-                with col1:
-                    st.info("Image Here")
-                with col2:
-                    st.write(f"**Rack ID:** {rack.rack_identifier}")
-                    st.write(f"**Description:** {rack.description if rack.description else 'No description provided.'}")
-                    st.write(f"**Species:** {s.name if s else 'Unknown'}")
-                    st.write(f"**Variety:** {v.name if v else 'Unknown'}")
-                    st.write("**Metadata:**")
-                    for k, val in rack.metadata_dict.items():
-                        st.write(f"- {k}: {val}")
-                    st.write(f"**Created At:** {rack.created_at.strftime('%Y-%m-%d %H:%M')}")
-                with col3:
-                    from modules.qr_utils import generate_qr_code, get_qr_bytes
-                    qr_url = generate_qr_code(rack.rack_identifier, "rack")
-                    st.image(qr_url, width=150, caption="QR Code")
-                    qr_bytes = get_qr_bytes(qr_url)
-                    if qr_bytes:
-                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Rack_{rack.rack_identifier}_QR.png", mime="image/png", key="dl_qr_rack")
-            else:
-                st.error("Rack not found.")
-        except Exception:
-            st.error("Invalid Rack Identifier or database error.")
-            
-    elif e_type == "variety":
+            record_id = int(identifier)
+            if not 0 < record_id <= 2**63 - 1:
+                raise ValueError
+        except ValueError:
+            st.error(f"Invalid {kind} ID in the QR link.")
+            return
+        record = session.get(Species if kind == "species" else Variety, record_id)
+    else:
+        model = Rack if kind == "rack" else Vessel
+        field = Rack.rack_identifier if kind == "rack" else Vessel.vessel_identifier
+        record = session.exec(select(model).where(field == identifier)).first()
+    if record is None:
+        st.error(f"{kind.title()} not found.")
+        return
+    st.subheader(f"{kind.title()}: {record.name or identifier}")
+    if kind == "species":
+        st.write(record.description or "No description provided.")
+        st.write(
+            "Varieties:",
+            ", ".join(
+                v.name
+                for v in session.exec(
+                    select(Variety).where(Variety.species_id == record.id)
+                ).all()
+            )
+            or "None",
+        )
+    elif kind == "variety":
+        parent = session.get(Species, record.species_id)
+        st.write("Species:", parent.name if parent else "Unknown")
+        st.write(record.description or "No description provided.")
+        st.write(
+            "Racks:",
+            ", ".join(
+                r.rack_identifier
+                for r in session.exec(
+                    select(Rack).where(Rack.variety_id == record.id)
+                ).all()
+            )
+            or "None",
+        )
+    elif kind == "rack":
+        variety = session.get(Variety, record.variety_id)
+        species = session.get(Species, variety.species_id) if variety else None
+        st.write(
+            "Species:",
+            species.name if species else "Unknown",
+            " | Variety:",
+            variety.name if variety else "Unknown",
+        )
+        st.write("Identifier:", record.rack_identifier)
+        st.write("Description:", record.description or "None")
         try:
-            v_id_int = int(e_id)
-            v = session.get(Variety, v_id_int)
-            if v:
-                s = session.get(Species, v.species_id)
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.info(f"**Variety:** {v.name}")
-                    st.write(f"**Parent Species:** {s.name if s else 'Unknown'}")
-                    st.write(f"**Description:** {v.description}")
-                    st.write("---")
-                    st.write("### Associated Racks")
-                    racks = session.exec(select(Rack).where(Rack.variety_id == v.id)).all()
-                    if racks:
-                        for r in racks:
-                            st.write(f"- {r.rack_identifier}")
-                    else:
-                        st.write("No racks assigned to this variety.")
-                with col2:
-                    from modules.qr_utils import generate_qr_code, get_qr_bytes
-                    qr_url = generate_qr_code(str(v.id), "variety")
-                    st.image(qr_url, width=150, caption="QR Code")
-                    qr_bytes = get_qr_bytes(qr_url)
-                    if qr_bytes:
-                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Variety_{v.id}_QR.png", mime="image/png", key="dl_qr_var")
+            st.write("Metadata:", record.metadata_dict)
+        except ValueError:
+            st.warning(
+                "This rack has invalid metadata JSON. The original value is shown below for repair."
+            )
+            st.code(record.metadata_json or "", language="json")
+        image = get_image_path(record.image_url)
+        if image:
+            st.image(image, caption="Rack image", width=300)
+    else:
+        rack = session.get(Rack, record.rack_id)
+        st.write("Identifier:", record.vessel_identifier)
+        st.write("Rack:", rack.rack_identifier if rack else "Unknown")
+        st.write("Passage number:", record.passage_number)
+        st.write("Medium batch:", record.medium_batch or "Not recorded")
+        st.write("Subculture date:", str(record.subculture_date or "Not recorded"))
+        st.write("Contamination status:", record.contamination_status)
+        st.write("Notes:", record.notes or "None")
+    show_qr(kind, identifier)
+
+
+with get_session() as session:
+    if "type" in st.query_params or "id" in st.query_params:
+        st.title("QR scan result")
+        scan_view(
+            session, st.query_params.get("type", ""), st.query_params.get("id", "")
+        )
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+    else:
+        st.title("Laboratory Inventory Management System")
+        st.write(
+            "Browse species, varieties, racks and vessels using the sidebar. Scan QR labels to open records directly."
+        )
+        if is_admin():
+            st.subheader("Inventory exports")
+            st.download_button(
+                "Download inventory CSV",
+                inventory_csv(session),
+                file_name="inventory.csv",
+                mime="text/csv",
+            )
+            try:
+                labels = printable_labels(session)
+            except (ValueError, OSError) as exc:
+                st.warning(f"Printable labels unavailable. {exc}")
             else:
-                st.error("Variety not found.")
-        except:
-            st.error("Invalid Variety ID.")
-            
-    elif e_type == "species":
-        try:
-            s_id_int = int(e_id)
-            s = session.get(Species, s_id_int)
-            if s:
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.info(f"**Species:** {s.name}")
-                    st.write(f"**Description:** {s.description}")
-                    st.write("---")
-                    st.write("### Registered Varieties")
-                    varieties = session.exec(select(Variety).where(Variety.species_id == s.id)).all()
-                    if varieties:
-                        for v in varieties:
-                            st.write(f"- {v.name}")
-                    else:
-                        st.write("No varieties registered.")
-                with col2:
-                    from modules.qr_utils import generate_qr_code, get_qr_bytes
-                    qr_url = generate_qr_code(str(s.id), "species")
-                    st.image(qr_url, width=150, caption="QR Code")
-                    qr_bytes = get_qr_bytes(qr_url)
-                    if qr_bytes:
-                        st.download_button(label="Download QR", data=qr_bytes, file_name=f"Species_{s.id}_QR.png", mime="image/png", key="dl_qr_spec")
-            else:
-                st.error("Species not found.")
-        except:
-            st.error("Invalid Species ID.")
-
-    if st.button("Back to Main Dashboard"):
-        st.query_params.clear()
-        st.rerun()
-
-else:
-    st.title("Laboratory Inventory Management System")
-
-    def render_overview():
-        st.markdown("""
-        Welcome to the Laboratory Inventory Management System.
-
-        ### Features
-        - **QR Codes**: Generate QR code sheets for Species, Varieties, and Racks to access details instantly.
-        - **Species & Varieties**: Define testing categories and custom metadata schemas.
-        - **Racks & Assets**: Track containers and log dynamic metadata values.
-
-        ### Navigation
-        Use the sidebar menu to navigate.
-        """)
-        st.info("System operational. Database connected.")
-
-    if is_admin():
-        tab1, tab2 = st.tabs(["Dashboard Overview", "Admin Audit Logs"])
-        with tab1:
-            render_overview()
-        with tab2:
-            st.subheader("System Audit Logs")
-            session = get_session()
-            logs = session.exec(select(AuditLog).order_by(AuditLog.timestamp.desc())).all()
-            if logs:
-                log_data = []
-                for l in logs:
-                    log_data.append({
-                        "Timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                        "Action": l.action,
-                        "Table": l.table_name,
-                        "Record ID": l.record_id,
-                        "Details": l.details
-                    })
-                df = pd.DataFrame(log_data)
-                st.dataframe(df, use_container_width=True)
-                
-                # Export to CSV
-                csv_data = df.to_csv(index=False).encode("utf-8")
-                from datetime import datetime
                 st.download_button(
-                    label="Export Audit Logs as CSV",
-                    data=csv_data,
-                    file_name=f"audit_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    "Download printable QR labels",
+                    labels,
+                    file_name="inventory_labels.html",
+                    mime="text/html",
+                )
+            st.subheader("Audit logs")
+            logs = session.exec(
+                select(AuditLog).order_by(AuditLog.timestamp.desc())
+            ).all()
+            if logs:
+                rows = [
+                    {
+                        "Timestamp": str(log.timestamp),
+                        "Actor label": log.actor or "",
+                        "Action": log.action,
+                        "Table": log.table_name,
+                        "Record ID": log.record_id,
+                        "Details": log.details or "",
+                    }
+                    for log in logs
+                ]
+                st.dataframe(rows, use_container_width=True)
+                output = io.StringIO(newline="")
+                writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(
+                    {k: _csv_value(v) for k, v in row.items()} for row in rows
+                )
+                st.download_button(
+                    "Download audit CSV",
+                    output.getvalue().encode("utf-8-sig"),
+                    file_name="audit_logs.csv",
                     mime="text/csv",
-                    key="export_audit_logs"
                 )
             else:
                 st.info("No audit logs found.")
-    else:
-        render_overview()

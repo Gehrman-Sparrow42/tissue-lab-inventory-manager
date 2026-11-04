@@ -1,63 +1,97 @@
-import streamlit as st
+import hmac
 import os
-from dotenv import load_dotenv
+import sqlite3
+import time
 
-load_dotenv(override=True)
+import streamlit as st
+from sqlalchemy.exc import SQLAlchemyError
 
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+from modules.database import IS_POSTGRES, SQLITE_PATH, export_sqlite_backup
+
+_UNSAFE_PASSWORDS = {"", "admin", "change_this_admin_password_in_production"}
+
+
+def _configured_password():
+    password = os.getenv("ADMIN_PASSWORD", "")
+    return password if password.strip().lower() not in _UNSAFE_PASSWORDS else None
+
 
 def init_auth():
-    if "is_admin" not in st.session_state:
-        st.session_state.is_admin = False
+    st.session_state.setdefault("is_admin", False)
+
+
+def is_admin():
+    return bool(_configured_password() and st.session_state.get("is_admin", False))
+
 
 def render_auth_ui():
     init_auth()
-    st.markdown(
-        """
-        <style>
-        .stAppDeployButton {display: none !important;}
-        .stDeployButton {display: none !important;}
-        #MainMenu {visibility: hidden;}
-        button[data-testid="stHeaderDropdownMenu"] {visibility: hidden;}
-        footer {visibility: hidden;}
-        div[data-testid="stConnectionStatus"] {display: none !important;}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
     with st.sidebar:
-        st.write("---")
-        if st.session_state.is_admin:
+        st.divider()
+        if is_admin():
             st.success("Admin Mode Active")
+            st.caption(
+                f"Operator label — {st.session_state.get('admin_name', 'Admin')}"
+            )
             if st.button("Logout"):
                 st.session_state.is_admin = False
+                st.session_state.pop("admin_name", None)
+                st.session_state.pop("database_backup", None)
                 st.rerun()
-            
-            st.write("---")
-            DB_PATH = os.getenv("DB_PATH", "data/inventory.db")
-            if os.path.exists(DB_PATH):
-                with open(DB_PATH, "rb") as f:
+            if IS_POSTGRES:
+                st.caption("Use PostgreSQL backup tools to export this database.")
+            else:
+                st.caption(f"Database — {SQLITE_PATH.name}")
+                if st.button("Prepare Database Backup"):
+                    try:
+                        st.session_state.database_backup = export_sqlite_backup()
+                    except (SQLAlchemyError, OSError, sqlite3.Error):
+                        st.error(
+                            "Backup could not be prepared. Check database access and try again."
+                        )
+                if "database_backup" in st.session_state:
                     st.download_button(
-                        label="Export Database",
-                        data=f,
-                        file_name="inventory_backup.db",
-                        mime="application/octet-stream"
+                        "Export Database",
+                        st.session_state.database_backup,
+                        "inventory_backup.db",
+                        "application/octet-stream",
+                    )
+                    st.caption(
+                        "Snapshot from the last preparation. Prepare again to include newer changes."
                     )
         else:
+            password = _configured_password()
+            if password is None:
+                st.info(
+                    "Admin editing is disabled. Set a private ADMIN_PASSWORD in .env and restart the app."
+                )
+                return
             with st.expander("Admin Login", expanded=False):
-                pwd = st.text_input("Password", type="password")
+                operator = st.text_input(
+                    "Operator label",
+                    value="Admin",
+                    help="Recorded in audit events. This is a self-reported label for the shared admin login.",
+                )
+                entered = st.text_input("Password", type="password")
                 if st.button("Login"):
-                    if pwd == ADMIN_PASSWORD:
+                    now = time.monotonic()
+                    if now < st.session_state.get("login_locked_until", 0):
+                        st.error(
+                            "Too many attempts. Wait one minute before trying again."
+                        )
+                    elif not operator.strip():
+                        st.error("Enter an operator label for the audit log.")
+                    elif hmac.compare_digest(
+                        entered.encode("utf-8"), password.encode("utf-8")
+                    ):
                         st.session_state.is_admin = True
-                        st.success("Logged in!")
+                        st.session_state.admin_name = operator.strip()
+                        st.session_state.login_attempts = 0
                         st.rerun()
                     else:
+                        attempts = st.session_state.get("login_attempts", 0) + 1
+                        st.session_state.login_attempts = attempts
+                        if attempts >= 5:
+                            st.session_state.login_locked_until = now + 60
+                            st.session_state.login_attempts = 0
                         st.error("Invalid password.")
-        
-        st.write("---")
-        if st.button("Stop Server", help="Terminate the Streamlit server process."):
-            st.warning("Server shutting down...")
-            os._exit(0)
-
-def is_admin():
-    return st.session_state.get("is_admin", False)
