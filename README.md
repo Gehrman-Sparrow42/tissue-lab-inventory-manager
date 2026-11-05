@@ -1,6 +1,8 @@
 # Laboratory Inventory Manager
 
-A Streamlit inventory for species, varieties, racks and individual vessels. Species define rack metadata fields. Rack photos and QR labels are stored locally, and QR images are generated without an external service.
+[Open the live Lab Inventory Manager](https://tissue-lab-inventory-manager.vercel.app/)
+
+A Streamlit inventory for species, varieties, racks and individual vessels. Species define rack metadata fields. QR images are generated without an external service. The hosted app stores rack photos in Supabase, and local installations store them on disk.
 
 ## Setup
 

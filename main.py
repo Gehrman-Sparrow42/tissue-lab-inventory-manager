@@ -9,7 +9,6 @@ from sqlmodel import select
 from modules.auth import is_admin, render_auth_ui
 from modules.database import create_db_and_tables, get_session
 from modules.exports import _csv_value, inventory_csv, inventory_rows, printable_labels
-from modules.image_utils import get_image_path
 from modules.models import AuditLog, Rack, Species, Variety, Vessel
 from modules.qr_utils import generate_qr_code, get_qr_bytes
 from modules.ui import (
@@ -21,6 +20,7 @@ from modules.ui import (
     record_table,
     setup_page,
     show_image,
+    show_rack_photo,
     status_badge,
 )
 
@@ -127,9 +127,9 @@ def scan_view(session, kind, identifier):
             if record.description:
                 st.write(record.description)
         with photo:
-            image = get_image_path(record.image_url)
-            if image:
-                show_image(image, caption="Rack image", use_container_width=True)
+            show_rack_photo(
+                record.image_url, caption="Rack image", use_container_width=True
+            )
         st.subheader("Metadata")
         try:
             metadata = record.metadata_dict

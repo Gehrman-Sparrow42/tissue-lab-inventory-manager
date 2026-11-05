@@ -295,6 +295,23 @@ button[kind="secondary"]:hover, button[kind="secondaryFormSubmit"]:hover {
     color: var(--lab-muted);
     max-width: 68ch;
 }
+.rack-photo-placeholder {
+    margin: 0;
+    border: 1px solid var(--lab-line);
+    border-radius: 12px;
+    background: #edf2f8;
+    color: var(--lab-muted);
+    text-align: center;
+}
+.rack-photo-placeholder svg {
+    display: block;
+    width: 100%;
+    max-height: 8rem;
+}
+.rack-photo-placeholder figcaption {
+    padding: 0 .5rem .75rem;
+    font-size: .8rem;
+}
 .status-badge {
     display: inline-block;
     font-size: .78rem;

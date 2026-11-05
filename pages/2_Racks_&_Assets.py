@@ -10,7 +10,6 @@ from sqlmodel import select
 from modules.auth import is_admin, render_auth_ui
 from modules.database import create_db_and_tables, get_session, log_audit
 from modules.image_utils import (
-    get_image_path,
     normalize_image_reference,
     process_and_save_image,
     safe_remove_file,
@@ -26,6 +25,7 @@ from modules.ui import (
     page_header,
     setup_page,
     show_image,
+    show_rack_photo,
 )
 from modules.validation import validate_metadata_values
 
@@ -297,11 +297,7 @@ with get_session() as session:
             )
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
-                image_path = get_image_path(rack.image_url)
-                if image_path:
-                    show_image(image_path)
-                else:
-                    st.caption("No image available")
+                show_rack_photo(rack.image_url)
             with col2:
                 detail_grid(
                     [

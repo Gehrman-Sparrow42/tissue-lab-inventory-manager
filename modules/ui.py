@@ -8,6 +8,8 @@ from urllib.parse import urlencode
 
 import streamlit as st
 
+from modules.image_utils import get_image_path
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -124,6 +126,25 @@ def show_image(image, **kwargs):
         mime = "image/png" if content.startswith(b"\x89PNG") else "image/jpeg"
         image = f"data:{mime};base64," + base64.b64encode(content).decode("ascii")
     return st.image(image, **kwargs)
+
+
+def show_rack_photo(reference, **kwargs):
+    image = get_image_path(reference)
+    if image:
+        return show_image(image, **kwargs)
+    return st.markdown(
+        """<figure class="rack-photo-placeholder">
+<svg viewBox="0 0 240 112" aria-hidden="true" focusable="false">
+<g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+<path d="M73 65h94v20H73z M82 85v8m76-8v8"/>
+<path d="M86 34h14m-12 0v32m10-32v32m15-39h14m-12 0v39m10-39v39m15-32h14m-12 0v32m10-32v32"/>
+<path d="M88 55h10m17-8h10m17 8h10"/>
+</g>
+</svg>
+<figcaption>Rack photo unavailable</figcaption>
+</figure>""",
+        unsafe_allow_html=True,
+    )
 
 
 def download_file(label, data, file_name=None, mime=None, key=None):
