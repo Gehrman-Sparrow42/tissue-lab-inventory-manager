@@ -13,7 +13,7 @@ from qrcode.exceptions import DataOverflowError
 
 load_dotenv()
 ROOT = Path(__file__).resolve().parent.parent
-QR_DIR = ROOT / "assets" / "qrcodes"
+QR_DIR = Path(os.getenv("QR_CACHE_DIR") or ROOT / "assets" / "qrcodes")
 
 
 def _target_url(identifier: str, entity_type: str) -> str:

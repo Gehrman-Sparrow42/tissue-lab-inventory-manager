@@ -500,3 +500,19 @@ button[kind="secondary"]:hover, button[kind="secondaryFormSubmit"]:hover {
     overflow: visible !important;
     text-overflow: clip !important;
 }
+.lab-cloud-download {
+    display: inline-block;
+    min-height: 40px;
+    padding: 8px 16px;
+    border: 1px solid #c6d1df;
+    border-radius: 8px;
+    color: #263c59;
+    background: #fff;
+    font-weight: 550;
+    text-decoration: none;
+}
+.lab-cloud-download:hover {
+    border-color: #91a5c1;
+    background: #edf3ff;
+    text-decoration: none;
+}

@@ -1,0 +1,16 @@
+.git
+.vercel
+.env*
+.agents
+.agy-staff
+.impeccable
+.venv
+venv
+__pycache__
+**/__pycache__
+.pytest_cache
+.ruff_cache
+data
+assets/images
+assets/qrcodes
+tests

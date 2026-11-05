@@ -53,3 +53,7 @@ The regression suite covers metadata preservation, schema validation, legacy mig
 - `modules/database.py` owns configuration, compatible migrations, audit staging and SQLite snapshots.
 - `modules/validation.py` validates schemas and preserves metadata during reconciliation.
 - `modules/qr_utils.py`, `modules/image_utils.py` and `modules/exports.py` supply local assets and downloads.
+
+## Vercel hosting
+
+The container deployment uses PostgreSQL for inventory and private Vercel Blob storage for photos. See [deployment/README.md](deployment/README.md) for runtime settings, provisioning and live verification. Local SQLite and asset files are excluded from the deployment package.

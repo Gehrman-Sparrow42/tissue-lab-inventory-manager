@@ -14,11 +14,13 @@ from modules.models import AuditLog, Rack, Species, Variety, Vessel
 from modules.qr_utils import generate_qr_code, get_qr_bytes
 from modules.ui import (
     detail_grid,
+    download_file,
     empty_state,
     location_trail,
     page_header,
     record_table,
     setup_page,
+    show_image,
     status_badge,
 )
 
@@ -33,10 +35,8 @@ def show_qr(kind, identifier):
     except (ValueError, OSError) as exc:
         st.warning(f"QR label unavailable. {exc}")
         return
-    st.image(data, width=160, caption="Scan to open this record")
-    st.download_button(
-        "Download QR", data, file_name=f"{kind}_qr.png", mime="image/png"
-    )
+    show_image(data, width=160, caption="Scan to open this record")
+    download_file("Download QR", data, file_name=f"{kind}_qr.png", mime="image/png")
 
 
 def scan_view(session, kind, identifier):
@@ -129,7 +129,7 @@ def scan_view(session, kind, identifier):
         with photo:
             image = get_image_path(record.image_url)
             if image:
-                st.image(image, caption="Rack image", use_container_width=True)
+                show_image(image, caption="Rack image", use_container_width=True)
         st.subheader("Metadata")
         try:
             metadata = record.metadata_dict
@@ -319,7 +319,7 @@ def overview(session):
                         "Changes will appear here after records are created or updated."
                     )
             with downloads:
-                st.download_button(
+                download_file(
                     "Download inventory CSV",
                     inventory_csv(session),
                     file_name="inventory.csv",
@@ -330,7 +330,7 @@ def overview(session):
                 except (ValueError, OSError) as exc:
                     st.warning(f"Printable labels unavailable. {exc}")
                 else:
-                    st.download_button(
+                    download_file(
                         "Download printable QR labels",
                         labels,
                         file_name="inventory_labels.html",
@@ -344,7 +344,7 @@ def overview(session):
                         {key: _csv_value(value) for key, value in row.items()}
                         for row in logs
                     )
-                    st.download_button(
+                    download_file(
                         "Download audit CSV",
                         output.getvalue().encode("utf-8-sig"),
                         file_name="audit_logs.csv",

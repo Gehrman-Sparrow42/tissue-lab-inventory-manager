@@ -10,11 +10,13 @@ from modules.models import Rack, Species, Variety, Vessel
 from modules.qr_utils import generate_qr_code, get_qr_bytes
 from modules.ui import (
     detail_grid,
+    download_file,
     empty_state,
     location_trail,
     page_header,
     record_table,
     setup_page,
+    show_image,
 )
 
 STATUSES = ["Unknown", "Clean", "Contaminated", "Suspected"]
@@ -234,8 +236,8 @@ with get_session() as session:
                     generate_qr_code(vessel.vessel_identifier, "vessel")
                 )
                 if qr_bytes:
-                    st.image(qr_bytes, width=150)
-                    st.download_button(
+                    show_image(qr_bytes, width=150)
+                    download_file(
                         "Download Label",
                         qr_bytes,
                         file_name=f"{vessel.vessel_identifier}_QR.png",

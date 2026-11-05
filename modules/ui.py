@@ -1,5 +1,7 @@
 """Shared inventory shell and presentation primitives."""
 
+import base64
+import os
 from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
@@ -111,3 +113,28 @@ def record_table(rows):
         + "</tbody></table></div>",
         unsafe_allow_html=True,
     )
+
+
+def show_image(image, **kwargs):
+    """Keep generated media on the active WebSocket in scaled cloud deployments."""
+    if os.getenv("CLOUD_DEPLOYMENT") == "1":
+        content = (
+            Path(image).read_bytes() if isinstance(image, (str, Path)) else bytes(image)
+        )
+        mime = "image/png" if content.startswith(b"\x89PNG") else "image/jpeg"
+        image = f"data:{mime};base64," + base64.b64encode(content).decode("ascii")
+    return st.image(image, **kwargs)
+
+
+def download_file(label, data, file_name=None, mime=None, key=None):
+    """Serve cloud downloads without instance-local Streamlit media routes."""
+    if os.getenv("CLOUD_DEPLOYMENT") != "1":
+        return st.download_button(label, data, file_name=file_name, mime=mime, key=key)
+    content = data.encode("utf-8") if isinstance(data, str) else bytes(data)
+    encoded = base64.b64encode(content).decode("ascii")
+    href = f"data:{mime or 'application/octet-stream'};base64,{encoded}"
+    st.markdown(
+        f'<a class="lab-cloud-download" href="{escape(href, quote=True)}" download="{escape(file_name or "download", quote=True)}">{escape(label)}</a>',
+        unsafe_allow_html=True,
+    )
+    return False

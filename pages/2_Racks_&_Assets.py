@@ -9,11 +9,24 @@ from sqlmodel import select
 
 from modules.auth import is_admin, render_auth_ui
 from modules.database import create_db_and_tables, get_session, log_audit
-from modules.image_utils import get_image_path, process_and_save_image, safe_remove_file
+from modules.image_utils import (
+    get_image_path,
+    normalize_image_reference,
+    process_and_save_image,
+    safe_remove_file,
+)
 from modules.metadata_ui import render_metadata_fields
 from modules.models import Rack, Species, Variety, Vessel
 from modules.qr_utils import generate_qr_code, get_qr_bytes
-from modules.ui import detail_grid, empty_state, location_trail, page_header, setup_page
+from modules.ui import (
+    detail_grid,
+    download_file,
+    empty_state,
+    location_trail,
+    page_header,
+    setup_page,
+    show_image,
+)
 from modules.validation import validate_metadata_values
 
 
@@ -22,11 +35,13 @@ def metadata_prefix(prefix, variety_id, schema):
 
 
 def remove_unreferenced_image(session, path):
-    managed_path = get_image_path(path)
+    managed_path = normalize_image_reference(path)
     if managed_path is None:
         return
     saved_paths = session.exec(select(Rack.image_url)).all()
-    if not any(get_image_path(saved) == managed_path for saved in saved_paths):
+    if not any(
+        normalize_image_reference(saved) == managed_path for saved in saved_paths
+    ):
         safe_remove_file(managed_path)
 
 
@@ -284,7 +299,7 @@ with get_session() as session:
             with col1:
                 image_path = get_image_path(rack.image_url)
                 if image_path:
-                    st.image(image_path)
+                    show_image(image_path)
                 else:
                     st.caption("No image available")
             with col2:
@@ -308,8 +323,8 @@ with get_session() as session:
                     qr_bytes = b""
                     st.error(f"Could not generate rack label: {exc}")
                 if qr_bytes:
-                    st.image(qr_bytes, width=150)
-                    st.download_button(
+                    show_image(qr_bytes, width=150)
+                    download_file(
                         "Download Label",
                         qr_bytes,
                         file_name=f"{rack.rack_identifier}_QR.png",

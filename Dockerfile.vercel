@@ -1,0 +1,22 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CLOUD_DEPLOYMENT=1 \
+    PORT=80 \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    STREAMLIT_SERVER_HEADLESS=true
+
+WORKDIR /app
+COPY requirements.txt requirements-vercel.txt ./
+RUN python -m pip install --no-cache-dir -r requirements-vercel.txt
+
+COPY main.py ./
+COPY modules/ ./modules/
+COPY pages/ ./pages/
+COPY assets/ui.css ./assets/ui.css
+COPY .streamlit/config.toml ./.streamlit/config.toml
+COPY deployment/start.py ./deployment/start.py
+
+EXPOSE 80
+CMD ["python", "deployment/start.py"]

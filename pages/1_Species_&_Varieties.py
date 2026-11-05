@@ -8,7 +8,15 @@ from modules.auth import is_admin, render_auth_ui
 from modules.database import create_db_and_tables, get_session, log_audit
 from modules.models import Rack, Species, Variety
 from modules.qr_utils import generate_qr_code, get_qr_bytes
-from modules.ui import detail_grid, empty_state, location_trail, page_header, setup_page
+from modules.ui import (
+    detail_grid,
+    download_file,
+    empty_state,
+    location_trail,
+    page_header,
+    setup_page,
+    show_image,
+)
 from modules.validation import (
     migrate_racks_metadata,
     reconcile_metadata,
@@ -48,11 +56,11 @@ def show_qr(entity_id, entity_type, width, download=False):
     except (ValueError, OSError) as error:
         st.warning(f"QR code unavailable: {error}")
         return
-    st.image(get_qr_bytes(path), width=width)
+    show_image(get_qr_bytes(path), width=width)
     if download:
         qr_bytes = get_qr_bytes(path)
         if qr_bytes:
-            st.download_button(
+            download_file(
                 "Download QR",
                 data=qr_bytes,
                 file_name=f"{entity_type.capitalize()}_{entity_id}_QR.png",

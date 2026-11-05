@@ -7,6 +7,7 @@ import streamlit as st
 from sqlalchemy.exc import SQLAlchemyError
 
 from modules.database import IS_POSTGRES, SQLITE_PATH, export_sqlite_backup
+from modules.ui import download_file
 
 _UNSAFE_PASSWORDS = {"", "admin", "change_this_admin_password_in_production"}
 
@@ -52,7 +53,7 @@ def render_auth_ui():
                             "Backup could not be prepared. Check database access and try again."
                         )
                 if "database_backup" in st.session_state:
-                    st.download_button(
+                    download_file(
                         "Export Database",
                         st.session_state.database_backup,
                         "inventory_backup.db",

@@ -17,3 +17,5 @@ skills-lock.json
 .impeccable/mocks/
 .impeccable/review/
 .impeccable/build/
+.vercel
+.env*

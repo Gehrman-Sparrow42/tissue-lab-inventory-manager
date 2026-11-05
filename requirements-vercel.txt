@@ -1,0 +1,2 @@
+-r requirements.txt
+vercel-blob==0.5.1
