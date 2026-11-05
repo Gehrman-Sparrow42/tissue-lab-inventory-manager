@@ -324,3 +324,87 @@ def test_schema_migration_identifies_malformed_rack(db_engine):
             migrate_racks_metadata(session, species.id, "[]", "[]")
         session.rollback()
         assert rack.metadata_json == "malformed legacy payload"
+
+
+def test_workspace_search_and_record_filter(db_engine):
+    from pathlib import Path
+
+    with Session(db_engine) as session:
+        _, _, rack = hierarchy(session)
+        session.add(Vessel(vessel_identifier="Vessel-1", rack_id=rack.id))
+        session.commit()
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "main.py")).run()
+    app.text_input(key="workspace_search").set_value("R&1")
+    app.selectbox(key="workspace_type").set_value("Racks").run()
+    assert not app.exception
+    table = next(
+        item.value for item in app.markdown if 'class="inventory-table"' in item.value
+    )
+    assert table.count("<tr>") == 2
+    assert "R&amp;1" in table
+    assert "type=rack&amp;id=R%261" in table
+    assert 'target="_blank"' in table
+    app.text_input(key="workspace_search").set_value("does-not-exist").run()
+    assert any("Try another search" in item.value for item in app.info)
+
+
+def test_workspace_escapes_record_names(db_engine):
+    from pathlib import Path
+
+    with Session(db_engine) as session:
+        session.add(Species(name="<img src=x onerror=alert(1)>"))
+        session.commit()
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "main.py")).run()
+    assert not app.exception
+    table = next(
+        item.value for item in app.markdown if 'class="inventory-table"' in item.value
+    )
+    assert "<img src=x" not in table
+    assert "&lt;img src=x" in table
+
+
+def test_workspace_navigation_preserves_admin_session(db_engine, monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.setenv("ADMIN_PASSWORD", "test-private-password")
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "main.py"))
+    app.session_state.is_admin = True
+    app.run()
+    next(
+        button for button in app.button if button.label == "Browse racks"
+    ).click().run()
+    assert not app.exception
+    assert app.title[0].value == "Racks & assets"
+    assert app.session_state.is_admin
+
+
+def test_vessel_status_filter_scopes_responsive_records(db_engine):
+    from pathlib import Path
+
+    with Session(db_engine) as session:
+        _, _, rack = hierarchy(session)
+        session.add_all(
+            [
+                Vessel(
+                    vessel_identifier="CLEAN-1",
+                    rack_id=rack.id,
+                    contamination_status="Clean",
+                ),
+                Vessel(
+                    vessel_identifier="SUSPECT-1",
+                    rack_id=rack.id,
+                    contamination_status="Suspected",
+                ),
+            ]
+        )
+        session.commit()
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "main.py")).run()
+    app.switch_page("pages/3_Vessels.py").run()
+    app.selectbox(key="vessel_status_filter").set_value("Suspected").run()
+    assert not app.exception
+    table = next(
+        item.value for item in app.markdown if 'class="inventory-table"' in item.value
+    )
+    assert "SUSPECT-1" in table
+    assert "CLEAN-1" not in table
+    assert "status-warning" in table

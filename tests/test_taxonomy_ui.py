@@ -31,9 +31,9 @@ def db(monkeypatch, tmp_path):
 
 
 def app():
-    at = AppTest.from_file(PAGE, default_timeout=20)
+    at = AppTest.from_file(str(Path(PAGE).parents[1] / "main.py"), default_timeout=20)
     at.session_state["is_admin"] = True
-    at.run()
+    at.run().switch_page("pages/1_Species_&_Varieties.py").run()
     assert not at.exception
     return at
 

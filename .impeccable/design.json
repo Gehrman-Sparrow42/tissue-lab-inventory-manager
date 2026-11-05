@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-05T15:01:18.045138+00:00",
+  "title": "Design System: Lab Inventory",
+  "extensions": {
+    "breakpoints": [
+      {
+        "name": "medium",
+        "value": "900px"
+      },
+      {
+        "name": "small",
+        "value": "600px"
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-hover",
+        "value": "160ms ease-out",
+        "purpose": "Button background and border transitions. Reduced motion disables transitions."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "description": "Primary action for completing a task.",
+      "html": "<button class=\"ds-primary\">Save changes</button>",
+      "css": ".ds-primary{font-family:\"Segoe UI\",sans-serif;min-height:40px;padding:0 16px;border:1px solid #1d4ed8;border-radius:8px;background:#1d4ed8;color:#fff;font-weight:550;transition:background-color 160ms ease-out,border-color 160ms ease-out}.ds-primary:hover{background:#163eae;border-color:#163eae}.ds-primary:focus-visible{outline:2px solid #2563eb;outline-offset:3px}",
+      "refersTo": "button-primary"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "description": "Supporting action.",
+      "html": "<button class=\"ds-secondary\">Cancel</button>",
+      "css": ".ds-secondary{font-family:\"Segoe UI\",sans-serif;min-height:40px;padding:0 16px;border:1px solid #c6d1df;border-radius:8px;background:#fff;color:#263c59;font-weight:550}.ds-secondary:hover{border-color:#91a5c1;background:#edf3ff}.ds-secondary:focus-visible{outline:2px solid #2563eb;outline-offset:3px}",
+      "refersTo": "button-secondary"
+    },
+    {
+      "name": "Search field",
+      "kind": "input",
+      "description": "Native text input for finding inventory.",
+      "html": "<label class=\"ds-label\" for=\"ds-search\">Search inventory</label><input class=\"ds-search\" id=\"ds-search\" type=\"search\" placeholder=\"Search records\">",
+      "css": ".ds-label{font-family:\"Segoe UI\",sans-serif;display:block;font-size:.85rem;font-weight:550;margin-bottom:6px}.ds-search{font-family:\"Segoe UI\",sans-serif;padding:10px;border:1px solid #c6d1df;border-radius:8px;background:#fff;color:#19283d;font-size:1rem}.ds-search:focus-visible{outline:2px solid #2563eb;outline-offset:3px}",
+      "refersTo": "field"
+    },
+    {
+      "name": "Navigation rail",
+      "kind": "nav",
+      "description": "Page navigation with a current-page state.",
+      "html": "<nav class=\"ds-rail\" aria-label=\"Main navigation\"><strong>Lab Inventory</strong><a href=\"#\" aria-current=\"page\">Overview</a><a href=\"#\">Species &amp; varieties</a><a href=\"#\">Racks &amp; assets</a><a href=\"#\">Vessels</a></nav>",
+      "css": ".ds-rail{font-family:\"Segoe UI\",sans-serif;width:210px;padding:15px;background:#173457;color:#fff}.ds-rail strong{display:block;margin:8px 0 28px}.ds-rail a{display:block;min-height:24px;padding:.7rem .9rem;border-radius:7px;color:#edf3ff;text-decoration:none;font-size:.91rem}.ds-rail a:hover{background:#24476e}.ds-rail a[aria-current=page]{background:#2c507a}.ds-rail a:focus-visible{outline:2px solid #2563eb;outline-offset:3px}"
+    },
+    {
+      "name": "Status badges",
+      "kind": "chip",
+      "description": "Culture status with text and color.",
+      "html": "<span class=\"ds-badge ds-clean\">Clean</span> <span class=\"ds-badge ds-warning\">Suspected</span> <span class=\"ds-badge ds-critical\">Contaminated</span>",
+      "css": ".ds-badge{font-family:\"Segoe UI\",sans-serif;display:inline-block;font-size:.78rem;font-weight:600;padding:.3rem .6rem;border-radius:5px;white-space:nowrap}.ds-clean{color:#17613c;background:#e7f4ed}.ds-warning{color:#7e5109;background:#fff2d8}.ds-critical{color:#992d38;background:#fbecef}"
+    },
+    {
+      "name": "Location trail",
+      "kind": "nav",
+      "description": "Wrapping hierarchy of inventory locations.",
+      "html": "<nav class=\"ds-trail\" aria-label=\"Inventory hierarchy\"><ol><li>Species</li><li>Variety</li><li>Rack</li></ol></nav>",
+      "css": ".ds-trail{font-family:\"Segoe UI\",sans-serif;padding:.65rem 0 1rem;border-bottom:1px solid #dce3ed}.ds-trail ol{display:flex;flex-wrap:wrap;gap:.5rem;list-style:none;margin:0;padding:0}.ds-trail li{color:#385575;font-size:.85rem;overflow-wrap:anywhere}.ds-trail li+li:before{content:\"/\";color:#8293a8;margin-right:.5rem}"
+    },
+    {
+      "name": "Inventory record table",
+      "kind": "custom",
+      "description": "Record names, location, type and status adapt to narrow screens.",
+      "html": "<div class=\"ds-wrap\"><table class=\"ds-table\"><thead><tr><th>Record</th><th>Location</th><th>Type</th><th>Culture status</th></tr></thead><tbody><tr><td><a href=\"#\">Vessel A</a><small>V-001</small></td><td class=\"ds-location\">Species / Variety / Rack</td><td class=\"ds-kind\">Vessel</td><td class=\"ds-state\"><span class=\"ds-status\">Clean</span></td></tr></tbody></table></div>",
+      "css": ".ds-wrap{overflow-x:auto;background:#fff;border:1px solid #dce3ed;border-radius:12px}.ds-table{font-family:\"Segoe UI\",sans-serif;width:100%;border-collapse:collapse;font-size:.91rem}.ds-table th{text-align:left;background:#edf1f7;color:#4c5e75;font-size:.79rem;padding:.85rem 1.1rem}.ds-table td{padding:.75rem 1.1rem;border-top:1px solid #e6ecf3}.ds-table tr:hover{background:#f2f6fe}.ds-table a{color:#1d4bb2;font-weight:600;text-decoration:none}.ds-table a:hover{text-decoration:underline}.ds-table a:focus-visible{outline:2px solid #2563eb;outline-offset:3px}.ds-table small{display:block;color:#526277;margin-top:.3rem}.ds-location{overflow-wrap:anywhere;color:#435773}.ds-status{font-size:.78rem;font-weight:600;padding:.3rem .6rem;border-radius:5px;color:#17613c;background:#e7f4ed}@media(max-width:600px){.ds-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.ds-table tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;padding:.4rem .5rem}.ds-table td{border:0;padding:.55rem .5rem}.ds-location{grid-column:1;grid-row:2}.ds-kind{grid-column:2;grid-row:1}.ds-state{grid-column:2;grid-row:2}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A clear inventory workspace",
+    "overview": "Staff can scan record names and locations, navigate the collection, and reach editing actions in a familiar workspace. The interface uses a navy navigation rail, a cool canvas, white work surfaces, blue actions and compact labels. Native controls and readable record details support desktop use and phone scans.",
+    "keyCharacteristics": [
+      "Navigation remains distinct from the main work area.",
+      "Inventory names and parent locations lead the reading order.",
+      "A restrained palette carries action, hierarchy and culture status."
+    ],
+    "rules": [],
+    "dos": [
+      "Do keep record names, parent locations and culture status easy to scan.",
+      "Do use native controls and preserve visible keyboard focus.",
+      "Do retain readable labels and wrapping locations on narrow screens."
+    ],
+    "donts": [
+      "Don't rely on color alone to convey culture status.",
+      "Don't truncate navigation labels or long locations when they can wrap.",
+      "Don't add decorative raster assets to the inventory workspace without a product need."
+    ]
+  }
+}

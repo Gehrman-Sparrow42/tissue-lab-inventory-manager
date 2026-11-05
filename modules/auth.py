@@ -27,9 +27,11 @@ def is_admin():
 def render_auth_ui():
     init_auth()
     with st.sidebar:
-        st.divider()
         if is_admin():
-            st.success("Admin Mode Active")
+            st.markdown(
+                '<div class="sidebar-access"><strong>Editing enabled</strong>Admin access</div>',
+                unsafe_allow_html=True,
+            )
             st.caption(
                 f"Operator label — {st.session_state.get('admin_name', 'Admin')}"
             )
@@ -62,9 +64,7 @@ def render_auth_ui():
         else:
             password = _configured_password()
             if password is None:
-                st.info(
-                    "Admin editing is disabled. Set a private ADMIN_PASSWORD in .env and restart the app."
-                )
+                st.info("Admin editing is disabled.")
                 return
             with st.expander("Admin Login", expanded=False):
                 operator = st.text_input(

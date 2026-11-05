@@ -12,6 +12,12 @@ A Streamlit inventory for species, varieties, racks and individual vessels. Spec
 
 In the C:\Tools workspace, use the shared Python environment and `C:\Tools\LAUNCHERS\Launch_Tissue_Lab_Inventory_Manager.bat`. This launcher binds to loopback. To use phones on a trusted LAN, start Streamlit with an appropriate listening address and set `BASE_URL` to the reachable server address.
 
+## Workspace navigation
+
+Overview provides inventory search, record-type filters and sorting across the full hierarchy. It initially shows six matching records. Use **Show all matches** for the complete result set. Record links open details in a new tab, keeping the current workspace session available.
+
+Use the sidebar for species and varieties, racks and assets, or vessels. The vessel **Filters** control groups location and culture-status filters. On phones, record summaries wrap location and status into readable rows. Admin editing forms, downloads and audit history are available after signing in.
+
 ## Inventory workflows
 
 Guests can browse records and follow QR links. Admins can create and edit species, varieties, racks and vessels. Vessels record their parent rack, passage number, medium batch, optional subculture date, contamination status and notes. Parents containing child records cannot be deleted.

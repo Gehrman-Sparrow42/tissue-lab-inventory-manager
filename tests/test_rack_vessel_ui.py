@@ -53,10 +53,10 @@ def db(monkeypatch, tmp_path):
 
 
 def app(page):
-    at = AppTest.from_file(str(ROOT / "pages" / page), default_timeout=20)
+    at = AppTest.from_file(str(ROOT / "main.py"), default_timeout=20)
     at.session_state["is_admin"] = True
     at.session_state["admin_name"] = "Tester"
-    at.run()
+    at.run().switch_page(f"pages/{page}").run()
     assert not at.exception
     return at
 
@@ -174,7 +174,12 @@ def test_rack_move_rerenders_target_schema_and_preserves_values(db):
 
 def test_guest_cannot_mutate_inventory(db):
     for page in ("2_Racks_&_Assets.py", "3_Vessels.py"):
-        at = AppTest.from_file(str(ROOT / "pages" / page)).run()
+        at = (
+            AppTest.from_file(str(ROOT / "main.py"))
+            .run()
+            .switch_page(f"pages/{page}")
+            .run()
+        )
         assert not at.exception
         assert not any(
             button.label

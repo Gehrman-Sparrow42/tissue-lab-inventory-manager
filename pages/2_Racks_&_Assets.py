@@ -13,6 +13,7 @@ from modules.image_utils import get_image_path, process_and_save_image, safe_rem
 from modules.metadata_ui import render_metadata_fields
 from modules.models import Rack, Species, Variety, Vessel
 from modules.qr_utils import generate_qr_code, get_qr_bytes
+from modules.ui import detail_grid, empty_state, location_trail, page_header, setup_page
 from modules.validation import validate_metadata_values
 
 
@@ -37,12 +38,13 @@ def metadata_fields(schema, current, prefix):
         return None
 
 
-st.set_page_config(page_title="Racks & Assets", page_icon=None, layout="wide")
+setup_page("Racks & Assets", active="racks")
 create_db_and_tables()
 render_auth_ui()
 if st.session_state.get("toast_message"):
     st.toast(st.session_state.pop("toast_message"))
-st.title("Racks & Assets Management")
+page_header("Racks & assets", "Browse rack locations, metadata and labels.")
+location_trail(["Species", "Varieties", "Racks"])
 
 with get_session() as session:
     filter_v_id = st.session_state.get("filter_variety_id")
@@ -73,7 +75,23 @@ with get_session() as session:
             st.rerun()
     elif filter_v_id:
         filter_v_id = None
-    search = st.text_input("Global Search (Rack ID, Metadata)", "")
+    st.subheader("Find a rack")
+    search_col, filter_col = st.columns([3, 2])
+    with search_col:
+        search = st.text_input(
+            "Global Search (Rack ID, Metadata)",
+            "",
+            placeholder="Search identifiers, names or metadata",
+        )
+    with filter_col:
+        selected_filter = st.selectbox(
+            "Filter by variety",
+            [None, *ids],
+            format_func=lambda value: (
+                "All varieties" if value is None else variety_label(value)
+            ),
+            key="rack_inventory_variety_filter",
+        )
 
     if is_admin() and varieties:
         with st.expander("Add New Rack"):
@@ -87,6 +105,7 @@ with get_session() as session:
             if species:
                 schema = species.metadata_schema
                 with st.form("add_rack_form"):
+                    st.caption("Rack details")
                     identifier = st.text_input(
                         "Rack Identifier (Leave blank to auto-generate)"
                     )
@@ -154,6 +173,8 @@ with get_session() as session:
     query = select(Rack)
     if filter_v_id:
         query = query.where(Rack.variety_id == filter_v_id)
+    if selected_filter is not None:
+        query = query.where(Rack.variety_id == selected_filter)
     racks = session.exec(query).all()
     if search:
         q = search.lower()
@@ -165,8 +186,27 @@ with get_session() as session:
                 [r.rack_identifier, r.name or "", r.description or "", r.metadata_json]
             ).lower()
         ]
-    if not racks:
-        st.info("No racks found matching criteria.")
+    if racks:
+        st.caption(
+            f"{len(racks)} rack{'s' if len(racks) != 1 else ''} shown. Open a record below for details and editing."
+        )
+        st.dataframe(
+            [
+                {
+                    "Rack ID": r.rack_identifier,
+                    "Name": r.name or "—",
+                    "Location": variety_labels.get(r.variety_id, "Unknown"),
+                }
+                for r in racks
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        empty_state(
+            "No racks found",
+            "Try another search or variety. Admins can add a rack when a variety exists.",
+        )
     for rack in racks:
         variety = varieties_by_id.get(rack.variety_id)
         species = species_by_id.get(variety.species_id) if variety else None
@@ -233,6 +273,13 @@ with get_session() as session:
                             else:
                                 st.session_state.toast_message = f"Metadata repaired for rack '{rack.rack_identifier}'."
                                 st.rerun()
+            location_trail(
+                [
+                    species.name if species else "Unknown species",
+                    variety.name if variety else "Unknown variety",
+                    rack.rack_identifier,
+                ]
+            )
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
                 image_path = get_image_path(rack.image_url)
@@ -241,13 +288,15 @@ with get_session() as session:
                 else:
                     st.caption("No image available")
             with col2:
-                st.write(f"**Rack ID:** {rack.rack_identifier}")
-                if rack.name:
-                    st.write(f"**Name:** {rack.name}")
-                if rack.description:
-                    st.write(f"**Description:** {rack.description}")
-                st.write(f"**Species:** {species.name if species else 'N/A'}")
-                st.write(f"**Variety:** {variety.name if variety else 'N/A'}")
+                detail_grid(
+                    [
+                        ("Rack ID", rack.rack_identifier),
+                        ("Name", rack.name or "—"),
+                        ("Species", species.name if species else "N/A"),
+                        ("Variety", variety.name if variety else "N/A"),
+                        ("Description", rack.description or "—"),
+                    ]
+                )
                 st.write("**Metadata:**")
                 for key, value in (current_metadata or {}).items():
                     st.write(f"- **{key}:** {value}")
@@ -267,43 +316,6 @@ with get_session() as session:
                         mime="image/png",
                         key=f"dl_{rack.id}",
                     )
-                if is_admin() and st.button(
-                    "Delete Rack", key=f"del_{rack.id}", type="primary"
-                ):
-                    if session.exec(
-                        select(Vessel).where(Vessel.rack_id == rack.id)
-                    ).first():
-                        st.error(
-                            "Cannot delete a rack containing vessels. Move or delete its vessels first."
-                        )
-                    else:
-                        identifier, image, record_id = (
-                            rack.rack_identifier,
-                            rack.image_url,
-                            rack.id,
-                        )
-                        try:
-                            session.delete(rack)
-                            session.flush()
-                            log_audit(
-                                session,
-                                "DELETE",
-                                "Rack",
-                                record_id,
-                                f"Deleted rack {identifier}",
-                            )
-                            session.commit()
-                        except SQLAlchemyError:
-                            session.rollback()
-                            st.error(
-                                "Cannot delete this rack because it is still in use."
-                            )
-                        else:
-                            remove_unreferenced_image(session, image)
-                            st.session_state.toast_message = (
-                                f"Rack '{identifier}' deleted."
-                            )
-                            st.rerun()
             if is_admin() and ids and current_metadata is not None:
                 with st.expander("Edit"):
                     selected_id = st.selectbox(
@@ -331,7 +343,10 @@ with get_session() as session:
                                 value=rack.description or "",
                                 key=f"edit_desc_{rack.id}",
                             )
-                            st.write("**Edit Metadata**")
+                            st.write("**Metadata**")
+                            st.caption(
+                                "Existing fields outside this schema are retained."
+                            )
                             values = metadata_fields(
                                 schema,
                                 current_metadata,
@@ -389,3 +404,39 @@ with get_session() as session:
                                     st.rerun()
                     else:
                         st.error("The selected variety has no species.")
+
+            if is_admin() and st.button(
+                "Delete Rack",
+                key=f"del_{rack.id}",
+                help="Permanently delete an empty rack.",
+            ):
+                if session.exec(
+                    select(Vessel).where(Vessel.rack_id == rack.id)
+                ).first():
+                    st.error(
+                        "Cannot delete a rack containing vessels. Move or delete its vessels first."
+                    )
+                else:
+                    identifier, image, record_id = (
+                        rack.rack_identifier,
+                        rack.image_url,
+                        rack.id,
+                    )
+                    try:
+                        session.delete(rack)
+                        session.flush()
+                        log_audit(
+                            session,
+                            "DELETE",
+                            "Rack",
+                            record_id,
+                            f"Deleted rack {identifier}",
+                        )
+                        session.commit()
+                    except SQLAlchemyError:
+                        session.rollback()
+                        st.error("Cannot delete this rack because it is still in use.")
+                    else:
+                        remove_unreferenced_image(session, image)
+                        st.session_state.toast_message = f"Rack '{identifier}' deleted."
+                        st.rerun()
