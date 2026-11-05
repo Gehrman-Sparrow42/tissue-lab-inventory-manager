@@ -1,2 +1,2 @@
--r requirements-vercel.txt
+-r requirements.txt
 pytest>=8.0

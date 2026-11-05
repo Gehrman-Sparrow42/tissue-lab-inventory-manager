@@ -5,6 +5,8 @@ from threading import RLock
 
 from dotenv import load_dotenv
 from sqlalchemy import event, inspect, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 from sqlmodel import Session, SQLModel, create_engine
 
 load_dotenv()
@@ -22,7 +24,7 @@ cloud_database = (
 DB_PATH = os.getenv("DB_PATH") or cloud_database or DEFAULT_DB_PATH
 IS_POSTGRES = DB_PATH.startswith(("postgresql://", "postgres://"))
 if IS_POSTGRES:
-    database_url = DB_PATH.replace("postgres://", "postgresql://", 1)
+    database_url = make_url(DB_PATH).set(drivername="postgresql+psycopg2")
     SQLITE_PATH = None
 else:
     SQLITE_PATH = Path(DB_PATH).expanduser()
@@ -32,7 +34,15 @@ else:
     SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
     database_url = "sqlite:///" + SQLITE_PATH.as_posix()
 
-engine = create_engine(database_url, echo=False, pool_pre_ping=True)
+engine_options = {"echo": False, "pool_pre_ping": True}
+if IS_POSTGRES and os.getenv("CLOUD_DEPLOYMENT") == "1":
+    # Let the hosted PostgreSQL pooler reuse connections across scaled instances;
+    # idle Streamlit sessions should not reserve database connections.
+    database_url = database_url.update_query_dict(
+        {"sslmode": "require", "connect_timeout": "10", **database_url.query}
+    )
+    engine_options["poolclass"] = NullPool
+engine = create_engine(database_url, **engine_options)
 _initialization_lock = RLock()
 
 
@@ -53,6 +63,16 @@ def create_db_and_tables():
             # New instances may start together after Vercel scales out.
             connection.execute(text("SELECT pg_advisory_xact_lock(1230762035)"))
         SQLModel.metadata.create_all(connection)
+        if IS_POSTGRES and os.getenv("SUPABASE_URL"):
+            # The Streamlit backend connects as the inventory table owner.
+            # Supabase's browser-facing API must not bypass the app's login.
+            for table in ("species", "variety", "rack", "vessel", "auditlog"):
+                connection.execute(
+                    text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
+                )
+                connection.execute(
+                    text(f'REVOKE ALL ON TABLE "{table}" FROM anon, authenticated')
+                )
         for table, additions in (
             ("rack", {"name": "VARCHAR", "description": "VARCHAR"}),
             ("auditlog", {"actor": "VARCHAR"}),
@@ -119,7 +139,7 @@ def create_db_and_tables():
                     END IF;
                     RETURN NEW;
                 END;
-                $$ LANGUAGE plpgsql
+                $$ LANGUAGE plpgsql SET search_path = pg_catalog, public
             """)
             )
             if not connection.execute(

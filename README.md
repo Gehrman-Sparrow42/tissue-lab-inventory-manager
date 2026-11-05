@@ -56,4 +56,4 @@ The regression suite covers metadata preservation, schema validation, legacy mig
 
 ## Vercel hosting
 
-The container deployment uses PostgreSQL for inventory and private Vercel Blob storage for photos. See [deployment/README.md](deployment/README.md) for runtime settings, provisioning and live verification. Local SQLite and asset files are excluded from the deployment package.
+The container deployment uses PostgreSQL for inventory and private Supabase Storage for photos. See [deployment/README.md](deployment/README.md) for runtime settings, provisioning and live verification. Local SQLite and asset files are excluded from the deployment package.

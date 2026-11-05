@@ -27,10 +27,15 @@ def test_hosted_start_requires_secrets_and_sets_cache(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "DATABASE_URL", "postgresql://example:example@db.invalid/inventory"
     )
-    monkeypatch.delenv("BLOB_READ_WRITE_TOKEN", raising=False)
-    with pytest.raises(RuntimeError, match="Blob"):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="Supabase Storage"):
         start_module().configure_environment()
-    monkeypatch.setenv("BLOB_READ_WRITE_TOKEN", "test-token")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    with pytest.raises(RuntimeError, match="Supabase Storage"):
+        start_module().configure_environment()
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
     monkeypatch.setenv("ADMIN_PASSWORD", "admin")
     with pytest.raises(RuntimeError, match="ADMIN_PASSWORD"):
         start_module().configure_environment()

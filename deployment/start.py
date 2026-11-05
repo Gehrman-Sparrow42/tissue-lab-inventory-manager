@@ -9,8 +9,10 @@ def configure_environment():
     database = os.getenv("DB_PATH") or os.getenv("DATABASE_URL")
     if not database or not database.startswith(("postgresql://", "postgres://")):
         raise RuntimeError("Hosted inventory requires a PostgreSQL DATABASE_URL.")
-    if not os.getenv("BLOB_READ_WRITE_TOKEN"):
-        raise RuntimeError("Hosted inventory requires a private Vercel Blob store.")
+    if not os.getenv("SUPABASE_URL") or not (
+        os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    ):
+        raise RuntimeError("Hosted inventory requires Supabase Storage credentials.")
     password = os.getenv("ADMIN_PASSWORD", "")
     if password.strip().lower() in {
         "",

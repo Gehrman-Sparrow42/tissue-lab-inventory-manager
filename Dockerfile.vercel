@@ -8,8 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true
 
 WORKDIR /app
-COPY requirements.txt requirements-vercel.txt ./
-RUN python -m pip install --no-cache-dir -r requirements-vercel.txt
+COPY requirements.txt ./
+RUN python -m pip install --no-cache-dir -r requirements.txt
 
 COPY main.py ./
 COPY modules/ ./modules/
