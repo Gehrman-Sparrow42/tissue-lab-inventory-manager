@@ -4,6 +4,23 @@
 
 A Streamlit inventory for species, varieties, racks and individual vessels. Species define rack metadata fields. QR images are generated without an external service. The hosted app stores rack photos in Supabase, and local installations store them on disk.
 
+## Architecture and workflow
+
+```mermaid
+flowchart LR
+    A[Species and metadata schemas] --> B[Varieties]
+    B --> C[Racks and assets]
+    C --> D[Vessels]
+    C --> E[Photos: local disk or Supabase Storage]
+    D --> F[QR labels and inventory exports]
+    A --> G[SQLite or PostgreSQL inventory and audit]
+    B --> G
+    C --> G
+    D --> G
+```
+
+The Streamlit interface manages the hierarchy and stages audit events alongside changes. QR links identify records; the configured base URL determines where a scanning device opens them.
+
 ## Setup
 
 1. Install Python 3.10 or newer and dependencies with `python -m pip install -r requirements.txt`.
@@ -11,8 +28,6 @@ A Streamlit inventory for species, varieties, racks and individual vessels. Spec
 3. Set `DB_PATH` if needed. The default is `data/inventory_v2.db`. An existing legacy `data/inventory.db` is reused when the newer file does not exist. Relative paths resolve from the project folder, including bare filenames.
 4. Set `BASE_URL` to the HTTP(S) address reachable by the device scanning labels, such as the server's LAN address. The default `http://localhost:8501` works for scans on the server itself. Regenerate and reprint labels after changing the address.
 5. Run `python -m streamlit run main.py` and visit the displayed address.
-
-In the C:\Tools workspace, use the shared Python environment and `C:\Tools\LAUNCHERS\Launch_Tissue_Lab_Inventory_Manager.bat`. This launcher binds to loopback. To use phones on a trusted LAN, start Streamlit with an appropriate listening address and set `BASE_URL` to the reachable server address.
 
 ## Workspace navigation
 
