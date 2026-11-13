@@ -84,3 +84,10 @@ class Vessel(SQLModel, table=True):
     contamination_status: str = "Unknown"
     notes: str | None = None
     created_at: datetime = Field(default_factory=get_utc_now)
+
+
+class AuthState(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    scope: str = Field(primary_key=True)
+    failed_attempts: int = Field(default=0)
+    locked_until: float = Field(default=0.0)

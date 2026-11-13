@@ -3,6 +3,7 @@ import sqlite3
 from pathlib import Path
 from threading import RLock
 
+import streamlit as st
 from dotenv import load_dotenv
 from sqlalchemy import event, inspect, text
 from sqlalchemy.engine import make_url
@@ -54,7 +55,7 @@ if not IS_POSTGRES:
         connection.execute("PRAGMA busy_timeout=10000")
 
 
-def create_db_and_tables():
+def _run_create_db_and_tables():
     """Initialize new databases and add compatible columns without dropping data."""
     from modules import models  # noqa: F401 — register all tables
 
@@ -66,7 +67,14 @@ def create_db_and_tables():
         if IS_POSTGRES and os.getenv("SUPABASE_URL"):
             # The Streamlit backend connects as the inventory table owner.
             # Supabase's browser-facing API must not bypass the app's login.
-            for table in ("species", "variety", "rack", "vessel", "auditlog"):
+            for table in (
+                "species",
+                "variety",
+                "rack",
+                "vessel",
+                "auditlog",
+                "authstate",
+            ):
                 connection.execute(
                     text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
                 )
@@ -154,6 +162,27 @@ def create_db_and_tables():
                     FOR EACH ROW EXECUTE FUNCTION enforce_variety_name()
                 """)
                 )
+
+
+@st.cache_resource
+def _cached_create_db_and_tables(engine_key: tuple[int, str, bool, bool]) -> bool:
+    _run_create_db_and_tables()
+    return True
+
+
+def create_db_and_tables():
+    """Cache schema initialization per engine across Streamlit reruns; run directly in scripts."""
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+    if get_script_run_ctx(suppress_warning=True) is not None:
+        engine_key = (
+            id(engine),
+            str(engine.url),
+            IS_POSTGRES,
+            bool(os.getenv("SUPABASE_URL")),
+        )
+        return _cached_create_db_and_tables(engine_key)
+    return _run_create_db_and_tables()
 
 
 def get_session():
